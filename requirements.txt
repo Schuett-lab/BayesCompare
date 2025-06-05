@@ -1,5 +1,6 @@
 # torchvision>=0.15.2
 # pytorch>=2.1.0
+# python 3.11
 scipy>=1.13
 numpy>=1.26
 tqdm>=4
