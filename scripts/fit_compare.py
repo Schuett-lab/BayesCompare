@@ -12,7 +12,7 @@ from BayesCompare import inference, evidence, inference_cov
 
 device = "cpu"
 al_select = [1, 2, 4, 5, 7, 9, 11, 12, 15, 18, 19]
-im_folder = "/Users/heiko.schutt/code/predseg/coco/images/unlabeled2017"
+im_folder = "images/unlabeled2017"
 file_names = os.listdir(im_folder)
 
 i_voxel = 0
@@ -22,19 +22,19 @@ N_test = 500
 
 # get a voxel to predict:
 places_fs = np.load(
-    "/Users/heiko.schutt/Algonouts/subj01/roi_masks/lh.floc-places_fsaverage_space.npy"
+    "algonouts/subj01/roi_masks/lh.floc-places_fsaverage_space.npy"
 )
 mask_fs = np.array(places_fs == 2, dtype=bool)
 idx_fs = np.where(mask_fs)[0]
 
 places_c = np.load(
-    "/Users/heiko.schutt/Algonouts/subj01/roi_masks/lh.floc-places_challenge_space.npy"
+    "algonouts/subj01/roi_masks/lh.floc-places_challenge_space.npy"
 )
 mask_c = np.array(places_c == 2, dtype=bool)
 idx_c = np.where(mask_c)[0]
 
 d_train = np.load(
-    "/Users/heiko.schutt/Algonouts/subj01/training_split/training_fmri/lh_training_fmri.npy"
+    "algonouts/subj01/training_split/training_fmri/lh_training_fmri.npy"
 )
 d_train = d_train[:, idx_c]
 
@@ -178,7 +178,7 @@ plt.imshow(dist, cmap="bone", vmax=1, vmin=0)
 plt.colorbar()
 plt.show()
 
-
+plt.figure(figsize=(6, 5))
 ddist = dist - dist_orig
 clim = np.max(np.abs(ddist))
 plt.imshow(ddist, vmin=-clim, vmax=clim, cmap="RdBu")
@@ -187,6 +187,7 @@ plt.savefig("figures/fit_ddist.svg")
 plt.savefig("figures/fit_ddist.pdf")
 
 
+plt.figure(figsize=(6, 5))
 plt.plot(dist_orig.flatten(), dist.flatten(), "k.")
 plt.plot([0, 1], [0, 1], "k--")
 plt.axis("square")
@@ -237,6 +238,7 @@ m_post = m_post - logsumexp(m_post, 1, keepdims=True)
 
 
 # plotting posterior(s) over models
+plt.figure(figsize=(15, 10))
 plt.axes((0.1, 0.1, 0.8, 0.55))
 plt.boxplot(m_post, whis=[0, 100])
 plt.plot([11.5, 11.5], [-10, 0], "k--")
@@ -282,7 +284,7 @@ y_mu, y_sigma = inference_cov(cov, d_train_ims[:, i_voxel].flatten(), alpha=alph
 scale = np.max(np.abs(cov))
 plt.imshow(cov, vmin=-scale, vmax=scale, cmap="RdBu")
 plt.colorbar()
-plt.savefig("cov_prior.pdf")
+plt.savefig("figures/cov_prior.pdf")
 
 y_sigma_prior = cov[N_train:, N_train:]
 scale_prior = np.max(np.abs(y_sigma_prior))
@@ -295,7 +297,7 @@ plt.colorbar()
 plt.subplot(1, 2, 2)
 plt.imshow(y_sigma, vmin=-scale, vmax=scale, cmap="RdBu")
 plt.colorbar()
-plt.savefig("covariances.pdf")
+plt.savefig("figures/covariances.pdf")
 
 plt.clf()
 plt.plot(y_mu, "k.", markersize=10)
@@ -305,7 +307,7 @@ ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 ax.spines["bottom"].set_visible(False)
 plt.xticks([])
-plt.savefig("y_pred.pdf")
+plt.savefig("figures/y_pred.pdf")
 
 
 idx_sort = np.argsort(y_mu)
@@ -322,5 +324,5 @@ ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 plt.xticks([])
 plt.xlabel("Stimulus [sorted]")
-plt.savefig("../figures/y_pred_sorted.svg")
-plt.savefig("../figures/y_pred_sorted.pdf")
+plt.savefig("figures/y_pred_sorted.svg")
+plt.savefig("figures/y_pred_sorted.pdf")

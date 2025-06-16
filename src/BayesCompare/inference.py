@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.typing import NDArray
 from typing import Optional
-
+from scipy.linalg import pinv
 
 def inference(cov, y_train, alpha: float = 0.1):
     """calculates bayesian inference for the 0 mean Gaussian prediction
