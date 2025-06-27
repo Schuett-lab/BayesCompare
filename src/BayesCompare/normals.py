@@ -50,7 +50,7 @@ def jsd_normal_sig(sigma1, sigma2, N=10000, eye_w=0.0, gen=gen):
     zero mean
     and variances sigma1 & sigma2
 
-    This function normalizes the sigmas to determinant 1
+    This function normalizes the sigmas to trace 1
     before computing the jsd.
     """
     k = sigma1.shape[0]

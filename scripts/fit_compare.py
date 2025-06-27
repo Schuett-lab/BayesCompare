@@ -12,7 +12,7 @@ from BayesCompare import inference, evidence, inference_cov
 
 device = "cpu"
 al_select = [1, 2, 4, 5, 7, 9, 11, 12, 15, 18, 19]
-im_folder = "images/unlabeled2017"
+im_folder = "algonouts/subj01/training_split/training_images"
 file_names = os.listdir(im_folder)
 
 i_voxel = 0
@@ -21,18 +21,24 @@ N_train = 500
 N_test = 500
 
 # get a voxel to predict:
+# floc-places is the mask for place selective resions: OPPA, PPA and RSC
+# places_fs == 2 is used for selecting the PPA voxels
+
+# get the mask and indices for PPA voxels in the freesurfer space
 places_fs = np.load(
     "algonouts/subj01/roi_masks/lh.floc-places_fsaverage_space.npy"
 )
 mask_fs = np.array(places_fs == 2, dtype=bool)
 idx_fs = np.where(mask_fs)[0]
 
+# get the mask and indices for PPA voxels in the challenge space
 places_c = np.load(
     "algonouts/subj01/roi_masks/lh.floc-places_challenge_space.npy"
 )
 mask_c = np.array(places_c == 2, dtype=bool)
 idx_c = np.where(mask_c)[0]
 
+# load the fMRI data and select the voxel corresponding to PPA by using challange space ROI mask
 d_train = np.load(
     "algonouts/subj01/training_split/training_fmri/lh_training_fmri.npy"
 )
@@ -44,13 +50,13 @@ im_idx = np.array([int(fn[6:10]) for fn in file_names[: (N_train + N_test)]])
 d_train_ims = d_train[im_idx[:N_train], :]
 d_val_ims = d_train[im_idx[N_train : (N_train + N_test)], :]
 
-# get Alexnet Kernel matrix
+# load all images 
 ims = [
     PIL.Image.open(os.path.join(im_folder, f_name))  # type: ignore
     for f_name in file_names[: (N_train + N_test)]
 ]
 
-
+# get Alexnet Kernel matrix
 def ReLU_inplace_to_False(module):
     for layer in module._modules.values():
         if isinstance(layer, torch.nn.ReLU):
@@ -60,8 +66,6 @@ def ReLU_inplace_to_False(module):
 
 # take an imagenet trained alexnet
 al = torchvision.models.alexnet(weights=torchvision.models.AlexNet_Weights.IMAGENET1K_V1)
-activation = [None]
-ReLU_inplace_to_False(al)
 
 
 def get_activation(n):
@@ -74,18 +78,24 @@ def get_activation(n):
 activation = [None] * 20
 ReLU_inplace_to_False(al)
 
+# 5 convolutional layers, 3 pooling layers and 5 ReLU in between --> 0 to 12 
 for i in range(13):
     al.features[i].register_forward_hook(get_activation(i))
+    
+# 3 Dense layers, 2 ReLu and 2 Dropouts in between --> 13 to 19
 for i in range(7):
     al.classifier[i].register_forward_hook(get_activation(i + 13))
 
 preprocess = torchvision.models.AlexNet_Weights.IMAGENET1K_V1.transforms()
 
+# preprocess all images to be compatibly input to AlexNet
 x_input = torch.stack([preprocess(im.convert("RGB")) for im in ims])
 al.eval()
-out = al(x_input)
-# compute covariance matrix
 
+# gets the output and activations of AlexNet to *all* images
+out = al(x_input)
+
+# compute covariance matrix
 covs = [BayesCompare.get_cov(activation[i_act]) for i_act in tqdm.tqdm(al_select)]
 
 
@@ -116,6 +126,7 @@ for i_layer in resnet.children():
 resnet.eval()
 resnet.to(device)
 out = resnet(x_input)
+
 # compute covariance matrices & transform to numpy arrays
 covs.extend([BayesCompare.get_cov(act).detach().cpu().numpy() for act in tqdm.tqdm(activation_r)])
 
@@ -123,14 +134,13 @@ np.save("covs_algo_1000.npy", np.stack(covs))
 
 
 # loading covariance estimates here is possible!
-
 covs = np.load("covs_algo_1000.npy")
 
 # Normalize covariances:
 alpha = 0.9
 
 covs_norm = [
-    (cov / np.trace(cov) * (N_test + N_train)) * np.var(d_train_ims[:, i_voxel]) for cov in covs
+    (cov / np.trace(cov) * (N_test + N_train)) * np.var(d_train_ims[:, i_voxel]) for cov in covs # dont calculate var inside the for loop again and again?
 ]
 
 y_mus = [None] * len(covs_norm)
@@ -200,7 +210,7 @@ plt.gca().spines["right"].set_visible(False)
 plt.savefig("figures/fit_dists.svg")
 plt.savefig("figures/fit_dists.pdf")
 
-# caculating evidence new
+# calculating evidence new
 a_vals = np.linspace(-5, 0, 10)
 a_vals = np.exp(a_vals) / (1 + np.exp(a_vals))
 model_evidences = []
@@ -220,7 +230,7 @@ for i_voxel in tqdm.trange(d_train_ims.shape[1]):
 m_ev = np.stack(model_evidences)
 np.save("m_ev_algo_a_1000.npy", m_ev)
 
-# caculating evidence
+# calculating evidence
 model_evidences = []
 for i_voxel in tqdm.trange(d_train_ims.shape[1]):
     model_evidence = [evidence(cov, d_train_ims[:, i_voxel]) for cov in covs_norm]
