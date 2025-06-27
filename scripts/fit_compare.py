@@ -9,11 +9,13 @@ import tqdm
 import BayesCompare
 from BayesCompare import inference, evidence, inference_cov
 
-
 device = "cpu"
 al_select = [1, 2, 4, 5, 7, 9, 11, 12, 15, 18, 19]
+
+# sort image filenames according to their order of use as stimulus
 im_folder = "algonouts/subj01/training_split/training_images"
 file_names = os.listdir(im_folder)
+file_names.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
 
 i_voxel = 0
 
@@ -44,8 +46,12 @@ d_train = np.load(
 )
 d_train = d_train[:, idx_c]
 
-# choose the N_train+N_test first images
-im_idx = np.array([int(fn[6:10]) for fn in file_names[: (N_train + N_test)]])
+# check if the image filenames are in the correct format   
+if ('_' not in file_names[0]) or ('train' not in file_names[0]):
+    raise ValueError("File names inconsistent the Algonouts format. Please check the image directory.")
+
+# choose the first (N_train+N_test) images 
+im_idx = np.array([int((fn.split('_')[0]).split('-')[1]) for fn in file_names[: (N_train + N_test)]])
 
 d_train_ims = d_train[im_idx[:N_train], :]
 d_val_ims = d_train[im_idx[N_train : (N_train + N_test)], :]
