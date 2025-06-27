@@ -98,5 +98,5 @@ def evidence(cov, y_train, sigma_e: float = 0.001, mu: Optional[NDArray] = None)
     else:
         ss = np.expand_dims(y_train - mu, 0) @ inner_inv @ np.expand_dims(y_train - mu, 1)
     logdet = np.linalg.slogdet(inner_inv)
-    loglik = -logdet.logabsdet / 2 - ss / 2 - N / 2 * np.log(2 * np.pi)
+    loglik = logdet.logabsdet / 2 - ss / 2 - N / 2 * np.log(2 * np.pi)
     return loglik
