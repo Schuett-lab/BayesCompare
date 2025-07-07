@@ -1,4 +1,4 @@
-import BayesDist
+import BayesCompare
 import numpy as np
 import tqdm
 import matplotlib.pyplot as plt
@@ -18,7 +18,7 @@ dist = np.zeros((len(covs), len(covs)))
 for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
     for j, cj in tqdm.tqdm(enumerate(covs), total=len(covs), position=1):
         if j > i:
-            dist[i, j] = BayesDist.jsd_normal_sig(
+            dist[i, j] = BayesCompare.jsd_normal_sig(
                 covs[i][:N, :N], covs[j][:N, :N], 10000, eye_w=0.5)
             dist[j, i] = dist[i, j]
 
@@ -29,7 +29,7 @@ for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
 distNw = np.zeros((len(Ns), len(ws)))
 for j, w in tqdm.tqdm(enumerate(ws), total=len(ws), position=0):
     for i, N in tqdm.tqdm(enumerate(Ns), total=len(Ns), position=1):
-        distNw[i, j] = BayesDist.jsd_normal_sig(covs[17][:N, :N], covs[22][:N, :N], 10000, eye_w=w)
+        distNw[i, j] = BayesCompare.jsd_normal_sig(covs[17][:N, :N], covs[22][:N, :N], 10000, eye_w=w)
 
 plt.figure()
 plt.imshow(distNw, cmap="bone")
@@ -43,7 +43,7 @@ plt.savefig("figures/choose_a.pdf")
 distNw2 = np.zeros((len(Ns), len(ws)))
 for j, w in tqdm.tqdm(enumerate(ws), total=len(ws), position=0):
     for i, N in tqdm.tqdm(enumerate(Ns), total=len(Ns), position=1):
-        distNw2[i, j] = BayesDist.jsd_normal_sig(covs[18][:N, :N], covs[19][:N, :N], 10000, eye_w=w)
+        distNw2[i, j] = BayesCompare.jsd_normal_sig(covs[18][:N, :N], covs[19][:N, :N], 10000, eye_w=w)
 
 plt.figure()
 plt.imshow(distNw2, cmap="bone")

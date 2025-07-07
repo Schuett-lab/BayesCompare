@@ -91,7 +91,7 @@ resnet.to(device)
 out = resnet(x_input)
 # compute covariance matrices & transform to numpy arrays
 covs.extend(
-    [BayesDist.get_cov(act).detach().cpu().numpy()
+    [BayesCompare.get_cov(act).detach().cpu().numpy()
      for act in tqdm.tqdm(activation_r)])
 
 np.save("covs_1000.npy", np.stack(covs))

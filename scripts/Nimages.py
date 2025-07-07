@@ -1,5 +1,5 @@
 import numpy as np
-import BayesDist
+import BayesCompare
 import tqdm
 from matplotlib import pyplot as plt
 from scipy.stats import rankdata
@@ -22,22 +22,22 @@ for i_rep in tqdm.trange(n_rep, position=0):
                 if j > i:
                     eye_w = N / 200 / (1 + (N / 200))
                     idx = gen.choice(1000, N, replace=False)
-                    dist[0, i_N, i_rep, i, j] = BayesDist.jsd_normal_sig(
+                    dist[0, i_N, i_rep, i, j] = BayesCompare.jsd_normal_sig(
                         ci[idx][:, idx], cj[idx][:, idx], 10000, eye_w=eye_w
                     )
-                    dist[1, i_N, i_rep, i, j] = BayesDist.tvd_normal_sig(
+                    dist[1, i_N, i_rep, i, j] = BayesCompare.tvd_normal_sig(
                         ci[idx][:, idx], cj[idx][:, idx], 10000, eye_w=eye_w
                     )
-                    dist[2, i_N, i_rep, i, j] = BayesDist.others.cka(
+                    dist[2, i_N, i_rep, i, j] = BayesCompare.others.cka(
                         ci[idx][:, idx], cj[idx][:, idx]
                     )
-                    dist[3, i_N, i_rep, i, j] = BayesDist.others.rsa_corr(
+                    dist[3, i_N, i_rep, i, j] = BayesCompare.others.rsa_corr(
                         ci[idx][:, idx], cj[idx][:, idx]
                     )
-                    dist[4, i_N, i_rep, i, j] = BayesDist.others.rsa_cos(
+                    dist[4, i_N, i_rep, i, j] = BayesCompare.others.rsa_cos(
                         ci[idx][:, idx], cj[idx][:, idx]
                     )
-                    dist[5, i_N, i_rep, i, j] = BayesDist.others.rsa_acos(
+                    dist[5, i_N, i_rep, i, j] = BayesCompare.others.rsa_acos(
                         ci[idx][:, idx], cj[idx][:, idx]
                     )
                     for l in range(6):
@@ -56,16 +56,16 @@ for i_N, N in tqdm.tqdm(enumerate(Ns), total=len(Ns), position=1, leave=False):
             if j > i:
                 eye_w = N / 200 / (1 + (N / 200))
                 eye_w_2 = 5 * N / 200 / (1 + 5 * (N / 200))
-                dist[0, i_N, i, j] = BayesDist.jsd_normal_sig(
+                dist[0, i_N, i, j] = BayesCompare.jsd_normal_sig(
                     ci[idx][:, idx], cj[idx][:, idx], 10000, eye_w=eye_w
                 )
-                dist[1, i_N, i, j] = BayesDist.tvd_normal_sig(
+                dist[1, i_N, i, j] = BayesCompare.tvd_normal_sig(
                     ci[idx][:, idx], cj[idx][:, idx], 10000, eye_w=eye_w
                 )
-                dist[2, i_N, i, j] = BayesDist.jsd_normal_sig(
+                dist[2, i_N, i, j] = BayesCompare.jsd_normal_sig(
                     ci[idx][:, idx], cj[idx][:, idx], 10000, eye_w=eye_w_2
                 )
-                dist[3, i_N, i, j] = BayesDist.tvd_normal_sig(
+                dist[3, i_N, i, j] = BayesCompare.tvd_normal_sig(
                     ci[idx][:, idx], cj[idx][:, idx], 10000, eye_w=eye_w_2
                 )
                 for l in range(4):
