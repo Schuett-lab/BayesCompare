@@ -3,6 +3,7 @@ from numpy.typing import NDArray
 from typing import Optional
 from scipy.linalg import pinv
 
+
 def inference(cov, y_train, alpha: float = 0.1):
     """calculates bayesian inference for the 0 mean Gaussian prediction
     with covariance cov and training data y_train.
@@ -34,7 +35,10 @@ def inference(cov, y_train, alpha: float = 0.1):
     #        np.matmul(inner_inv, cov[:N, :N])),
     #    y_train) / sigma_e
     y_mu = (
-        (cov[N : (N + N_pred), :N] - cov[N : (N + N_pred), :N] @ inner_inv @ cov[:N, :N])
+        (
+            cov[N : (N + N_pred), :N]
+            - cov[N : (N + N_pred), :N] @ inner_inv @ cov[:N, :N]
+        )
         * (1 - alpha)
         / alpha
         @ y_train
@@ -89,14 +93,46 @@ def inference_cov(cov, y_train, alpha: float = 0):
     return y_mu, y_sigma_post
 
 
-def evidence(cov, y_train, sigma_e: float = 0.001, mu: Optional[NDArray] = None):
-    N = len(y_train)
+def evidence(
+    cov: NDArray, y: NDArray, sigma_e: float = 0.001, mu: Optional[NDArray] = None
+) -> float:
+    """
+    Get the log-likelihood that a given model produces the activations observed
+    from a certain observed measure (voxel or model)
+
+    Parameters
+    ----------
+
+    cov: np.array, shape (n_stim, n_stim)
+        Normalized covariance matrix coming from the model X (i.e. X^TX).
+        It describes the covariance of the different experimental conditions
+        with respect to the different measurement channels
+
+    y: np.array, shape (n_stim,)
+        Activation profile of a single measurement channel for each experimental
+        condition. In the case of fMRI, it represents the activations of a
+        single voxel across the space of experimental conditions or stimuli
+
+    sigma_b: float
+        Estimate of the variance attributed to the data
+
+    sigma_e: float
+        Estimate of the variance attributed to noise
+
+    Returns
+    -------
+
+    loglik: float
+        Log likelihood that y is produced by the model corresponding to cov
+
+    """
+    N = len(y)
     # precision matrix
     inner_inv = np.linalg.inv(sigma_e * np.eye(N) + cov[:N, :N])
     if mu is None:
-        ss = np.expand_dims(y_train, 0) @ inner_inv @ np.expand_dims(y_train, 1)
+        ss = np.expand_dims(y, 0) @ inner_inv @ np.expand_dims(y, 1)
     else:
-        ss = np.expand_dims(y_train - mu, 0) @ inner_inv @ np.expand_dims(y_train - mu, 1)
+        ss = np.expand_dims(y - mu, 0) @ inner_inv @ np.expand_dims(y - mu, 1)
     logdet = np.linalg.slogdet(inner_inv)
     loglik = logdet.logabsdet / 2 - ss / 2 - N / 2 * np.log(2 * np.pi)
     return loglik
