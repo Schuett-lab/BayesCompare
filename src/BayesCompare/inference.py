@@ -93,7 +93,7 @@ def inference_cov(cov, y_train, alpha: float = 0):
     return y_mu, y_sigma_post
 
 
-def sigma_cov(cov: NDArray, sigma_b: float, sigma_e: float, normalize=True) -> NDArray:
+def sigma_cov(cov: NDArray, sigma_b: float, sigma_e: float) -> NDArray:
     """
     Multiply the (normalized) covariance matrix by the estimated variance of
     the signal, and add the estimated variance of the noise, so the resulting
@@ -111,10 +111,6 @@ def sigma_cov(cov: NDArray, sigma_b: float, sigma_e: float, normalize=True) -> N
     sigma_e: float
         Estimate of the variance attributed to noise
 
-    normalize: bool, default True
-        Whether to normalize the input cov matrix such that its trace is equal
-        to N (number of stimuli) before combining it with the variance estimates
-
     Returns
     -------
 
@@ -123,9 +119,6 @@ def sigma_cov(cov: NDArray, sigma_b: float, sigma_e: float, normalize=True) -> N
         predictive distribution of y
     """
     N = cov.shape[0]
-
-    if normalize:
-        cov = cov / np.trace(cov) * N
 
     sigma_cov = sigma_b * cov + sigma_e * np.eye(N)
 
