@@ -93,9 +93,7 @@ def inference_cov(cov, y_train, alpha: float = 0):
     return y_mu, y_sigma_post
 
 
-def evidence(
-    cov: NDArray, y: NDArray, sigma_e: float = 0.001, mu: Optional[NDArray] = None
-) -> float:
+def evidence(cov: NDArray, y: NDArray, mu: Optional[NDArray] = None) -> float:
     """
     Get the log-likelihood that a given model produces the activations observed
     from a certain observed measure (voxel or model)
@@ -113,6 +111,9 @@ def evidence(
         condition. In the case of fMRI, it represents the activations of a
         single voxel across the space of experimental conditions or stimuli
 
+    mu: np.array or None, default None
+        Mean activation from the corresponding measurement channel
+
     sigma_b: float
         Estimate of the variance attributed to the data
 
@@ -128,7 +129,7 @@ def evidence(
     """
     N = len(y)
     # precision matrix
-    inner_inv = np.linalg.inv(sigma_e * np.eye(N) + cov[:N, :N])
+    inner_inv = np.linalg.inv(cov[:N, :N])
     if mu is None:
         ss = np.expand_dims(y, 0) @ inner_inv @ np.expand_dims(y, 1)
     else:
