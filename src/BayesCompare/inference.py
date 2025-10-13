@@ -93,6 +93,45 @@ def inference_cov(cov, y_train, alpha: float = 0):
     return y_mu, y_sigma_post
 
 
+def sigma_cov(cov: NDArray, sigma_b: float, sigma_e: float, normalize=True) -> NDArray:
+    """
+    Multiply the (normalized) covariance matrix by the estimated variance of
+    the signal, and add the estimated variance of the noise, so the resulting
+    matrix represents the estimated total variance of the predictive distribution
+
+    Parameters
+    ----------
+
+    cov: np.array, shape (n_stim, n_stim)
+        Covariance matrix
+
+    sigma_b: float
+        Estimate of the variance attributed to the data
+
+    sigma_e: float
+        Estimate of the variance attributed to noise
+
+    normalize: bool, default True
+        Whether to normalize the input cov matrix such that its trace is equal
+        to N (number of stimuli) before combining it with the variance estimates
+
+    Returns
+    -------
+
+    sigma_cov: NDArray
+        Modified covariance matrix that represents the variance of the
+        predictive distribution of y
+    """
+    N = cov.shape[0]
+
+    if normalize:
+        cov = cov / np.trace(cov) * N
+
+    sigma_cov = sigma_b * cov + sigma_e * np.eye(N)
+
+    return sigma_cov
+
+
 def evidence(cov: NDArray, y: NDArray, mu: Optional[NDArray] = None) -> float:
     """
     Get the log-likelihood that a given model produces the activations observed
@@ -114,12 +153,6 @@ def evidence(cov: NDArray, y: NDArray, mu: Optional[NDArray] = None) -> float:
     mu: np.array or None, default None
         Mean activation from the corresponding measurement channel
 
-    sigma_b: float
-        Estimate of the variance attributed to the data
-
-    sigma_e: float
-        Estimate of the variance attributed to noise
-
     Returns
     -------
 
@@ -128,8 +161,7 @@ def evidence(cov: NDArray, y: NDArray, mu: Optional[NDArray] = None) -> float:
 
     """
     N = len(y)
-    # precision matrix
-    inner_inv = np.linalg.inv(cov[:N, :N])
+    inner_inv = np.linalg.inv(cov[:N, :N])  # Precision matrix
     if mu is None:
         ss = np.expand_dims(y, 0) @ inner_inv @ np.expand_dims(y, 1)
     else:
