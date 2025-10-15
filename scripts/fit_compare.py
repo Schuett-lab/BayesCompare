@@ -146,7 +146,7 @@ covs = np.load("covs_algo_1000.npy")
 alpha = 0.9
 
 covs_norm = [
-    (cov / np.trace(cov) * (N_test + N_train)) * np.var(d_train_ims[:, i_voxel]) for cov in covs # dont calculate var inside the for loop again and again?
+    (cov / np.trace(cov) * (N_test + N_train)) * np.var(d_train_ims[:, i_voxel]) for cov in covs
 ]
 
 y_mus = [None] * len(covs_norm)
