@@ -131,6 +131,8 @@ for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
 
 np.save("dist_example.npy", dist)
 
+dist = np.load("dist_example.npy")
+
 mds = MDS(dissimilarity="precomputed")
 mds.fit(dist)
 

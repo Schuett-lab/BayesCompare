@@ -13,10 +13,11 @@ def get_cov(activations):
     dimension.
     """
     if torch.is_tensor(activations):
-        activations = torch.reshape(activations, [activations.shape[0], -1])
-        activations -= torch.mean(activations, 1, keepdim=True)
-        return torch.matmul(activations, activations.T)
+        x = activations.detach().clone()
+        x = torch.reshape(x, [x.shape[0], -1])
+        x -= torch.mean(x, 1, keepdim=True)
+        return torch.matmul(x, x.T)
     else:
-        activations = np.reshape(activations, [activations.shape[0], -1])
-        activations -= np.mean(activations, 1, keepdims=True)
-        return np.matmul(activations, activations.T)
+        x = np.reshape(activations, [activations.shape[0], -1])
+        x -= np.mean(x, 1, keepdims=True)
+        return np.matmul(x, x.T)

@@ -6,4 +6,6 @@ from .normals import tvd_normal_general
 from .inference import inference
 from .inference import evidence
 from .inference import inference_cov
+from .distances import measure_dist
 from . import others
+
