@@ -2,7 +2,7 @@ import numpy as np
 from BayesCompare import measure_dist
 import matplotlib.pyplot as plt
 
-'''
+
 
 covs1 = np.load("/home/sezan/Documents/BayesCompare/covs_1000.npy")
 
@@ -14,7 +14,12 @@ save_path = "/home/sezan/Documents/BayesCompare/outputs/dists"
 
 alpha = 10/11
 
-dist_covs1_ws = measure_dist(covs1, meas_name='wasserstein', alpha=alpha)
+#dist_covs1_ws = measure_dist(covs1, checkpoint_dir="/home/sezan/Documents/BayesCompare/my_dist_checkpoints/", meas_name='wasserstein', alpha=alpha)
+
+dist_covs1_ws = measure_dist(covs1, checkpoint_dir="/home/sezan/Documents/BayesCompare/my_dist_checkpoints/", meas_name=['JSD', 'wasserstein'], alpha=alpha)
+
+1+1
+'''
 dist_covs1_hl = measure_dist(covs1, meas_name='hellinger', alpha=alpha)
 dist_covs1_mt = measure_dist(covs1, meas_name='matusita', alpha=alpha)
 dist_covs1_TVD = measure_dist(covs1, meas_name='TVD', alpha=alpha)
