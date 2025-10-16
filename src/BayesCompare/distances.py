@@ -9,16 +9,16 @@ def wasserstein(sigma1, sigma2, mu1=None, mu2=None):
     
     # these conditions do not check for one mean is non zero and other is zero !!!
     if mu1 is not None and mu2 is not None:
-        means_term = np.sum(np.square(mu1 - mu2))
+        means_term = np.linalg.norm(mu1 - mu2, 2)**2
     else:
-        means_term = 0
+        means_term=0
+        
+    sig1_sqrt = scipy.linalg.sqrtm(sigma1)
+    sig1_sig2_sqrt = scipy.linalg.sqrtm(sig1_sqrt @ sigma2 @ sig1_sqrt)
+    tr_term = sigma1 + sigma2 - 2*(sig1_sig2_sqrt) 
+    d_sq = means_term + np.trace(tr_term)
     
-    L1 = np.linalg.cholesky(sigma1)
-    L121 = np.linalg.cholesky(L1 @ sigma2 @ L1.transpose()) #not sure about L.T
-    tr_term = sigma1 + sigma2 - 2*(L121) 
-    d_sqd = means_term + np.trace(tr_term)
-    
-    return np.sqrt(d_sqd)
+    return d_sq**0.5
 
 def hellinger(sigma1, sigma2, mu1=None, mu2=None):
     
