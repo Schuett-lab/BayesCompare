@@ -2,6 +2,8 @@ import numpy as np
 import scipy.linalg
 from scipy.linalg.blas import dtrmm as mm
 import tqdm
+import os
+import glob
 
 ## Metrics
 
@@ -196,46 +198,101 @@ def bhattacharyya(sigma1, sigma2, mu1=None, mu2=None):
 
 ## Distance function caller
 
-def measure_dist(covs, mean=None, meas_name='TVD', alpha=0.01): # maybe set default alpha based on N (as in paper)
+def measure_dist(covs, checkpoint_dir, mean=None, meas_name='TVD', alpha=None, b=1/100): # maybe set default alpha based on N (as in paper)
     
-    if meas_name=='wasserstein':
-        measure = wasserstein
+    # check if a single string or a list of strings is given in the meas_name
+    if isinstance(meas_name, str):
+        meas_name = [meas_name]
+    
+    N=len(covs)
+    
+    dist_dict = {}
+    
+    for name in meas_name:
         
-    elif meas_name=='hellinger':
-        measure = hellinger
-    
-    elif meas_name=='TVD':
-        measure = tvd
-    
-    elif meas_name=='JSD':
-        measure = jsd
-    
-    elif meas_name=='KL_div':
-        measure = KL_div
-        
-    elif meas_name=='bhattacharyya':
-        measure = bhattacharyya
-    
-    dist = np.zeros((len(covs), len(covs)))
-    
-    for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
-        
-        sig1 = trace_norm(ci, eye_w=alpha)
-        
-        for j, cj in tqdm.tqdm(enumerate(covs), total=len(covs), position=1):
+        if alpha==None:
+            alpha = N * b / (1 + (N * b))
             
-            if j > i:
-
-                sig2 = trace_norm(cj, eye_w=alpha)
+        if name=='wasserstein':
+            measure = wasserstein
+            
+        elif name=='hellinger':
+            measure = hellinger
+        
+        elif name=='TVD':
+            measure = tvd
+        
+        elif name=='JSD':
+            measure = jsd
+        
+        elif name=='KL_div':
+            measure = KL_div
+            
+        elif name=='bhattacharyya':
+            measure = bhattacharyya
+        
+        dist, i = load_checkpoint(checkpoint_dir, name, N)
+        
+        if i==0:
+        
+            progress_bar = tqdm.tqdm(total=int((N*(N-1))/2))
+            
+            for i, ci in enumerate(covs):
                 
-                if measure == jsd or measure == tvd:
-                    dist[i, j] = measure(sig1, sig2, N=10000) # not using mean, for a generalized code mean should be provided
-                else:
-                    dist[i, j] = measure(sig1, sig2) # not using mean, for a generalized code mean should be provided
+                sig1 = trace_norm(ci, eye_w=alpha)
+                
+                for j, cj in enumerate(covs):
                     
-                dist[j, i] = dist[i, j]
+                    if j > i:
+
+                        sig2 = trace_norm(cj, eye_w=alpha)
+                        
+                        if measure == jsd or measure == tvd:
+                            dist[i, j] = measure(sig1, sig2, N=10000) # not using mean, for a generalized code mean should be provided
+                        else:
+                            dist[i, j] = measure(sig1, sig2) # not using mean, for a generalized code mean should be provided
+                            
+                        dist[j, i] = dist[i, j]
+                        
+                        progress_bar.update(1)
+                        
+                save_checkpoint(dist, name, i, checkpoint_dir)
+        
+        else:
+            
+            already_calculated = 0
+            
+            for a in range(i):
+                already_calculated += (N-1-a)
+            
+            progress_bar = tqdm.tqdm(initial=already_calculated, total=int((N*(N-1))/2))
+            
+            for i in range(i, N):
                 
-    return dist
+                ci = covs[i]
+                
+                sig1 = trace_norm(ci, eye_w=alpha)
+                
+                for j, cj in enumerate(covs):
+                    
+                    if j > i:
+
+                        sig2 = trace_norm(cj, eye_w=alpha)
+                        
+                        if measure == jsd or measure == tvd:
+                            dist[i, j] = measure(sig1, sig2, N=10000) # not using mean, for a generalized code mean should be provided
+                        else:
+                            dist[i, j] = measure(sig1, sig2) # not using mean, for a generalized code mean should be provided
+                            
+                        dist[j, i] = dist[i, j]
+                        
+                        progress_bar.update(1)
+                        
+                save_checkpoint(dist, name, i, checkpoint_dir)
+        
+        dist_dict[name] = dist
+        
+    return dist_dict            
 
 ## Helper functions
 
@@ -249,27 +306,53 @@ def trace_norm(sigma, eye_w=0.001):
     
     return A
 
-def get_chols(sigma1, sigma2):
+def save_checkpoint(dist, dist_name, i, directory):
     
-    A1 = np.linalg.cholesky(sigma1)
-    A2 = np.linalg.cholesky(sigma2)
-    A1_A2 = np.linalg.cholesky(sigma1 + sigma2)
+    print("Saving checkpoint at i: ", str(i))
+    print("Saving to the directory: " + directory + "checkpoint_dist_" + dist_name + "_" + str(i)+".npy")
     
-    return 
+    np.save(directory + "checkpoint_dist_" + dist_name + "_" + str(i)+".npy", dist)
+    
 
-'''
-## Small cholesky linearity experiment:
+def load_checkpoint(checkpoint_dir, dist_name, N):
+    
+    if os.path.exists(checkpoint_dir):
+        
+        checkpoint_path = checkpoint_dir + "checkpoint_dist_" + dist_name + "_*.npy"
+    
+        matching_files = [f for f in glob.glob(checkpoint_path) if os.path.isfile(f)]
+        
+        if matching_files:
+            
+            max_i=0
+            
+            for filename in matching_files:
+            
+                saved_i = int(filename.split("_")[-1][:-4])
 
-A = np.array([[5, 3 ,2], [4, 6, 2], [1, 1, 8]])
-La = np.linalg.cholesky(A)
-
-B = np.array([[9, 3, 1], [3, 8, 5], [3, 3, 12]])
-Lb = np.linalg.cholesky(B)
-
-C = A + B
-Lc = np.linalg.cholesky(C) # I suppose this may not even exist
-
-Lc_hat = La + Lb
-
-## Verdict: Lc_hat is not equal to Lc => Not linear!!
-'''
+                if saved_i > max_i: 
+                    max_i = saved_i
+            
+            latest_save_file = checkpoint_dir + "checkpoint_dist_" + dist_name + "_" + str(max_i) + ".npy"
+            
+            print("Loading checkpoint from:", latest_save_file)
+            
+            dists = np.load(latest_save_file)
+            
+            return dists, int(max_i)+1
+        
+        # return dist=zeros and i=0 if there are no matching files    
+        else:
+            
+            dist = np.zeros((N, N))
+            
+            return dist, 0
+            
+    # if a checkpoint path doesn't exist, create it and return dist=zeros and i=0
+    else:
+        
+        os.mkdir(checkpoint_dir)
+        
+        dist = np.zeros((N, N))
+        
+        return dist, 0
