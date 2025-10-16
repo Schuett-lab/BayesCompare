@@ -4,7 +4,6 @@ from scipy.linalg.blas import dtrmm as mm
 import tqdm
 import time
 
-## Also check if there is a difference between returning sqrt(d) or d**0.5
 
 def sqrt_w_svd(A):
     
@@ -23,6 +22,8 @@ def trace_norm(sigma, eye_w=0.001):
     
     return A
 
+'''
+### Isolating Wasserstein and Testing it
 
 # Wasserstein with Cholesky
 def wasserstein1(sigma1, sigma2, mu1=None, mu2=None):
@@ -106,3 +107,4 @@ for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
 ## Results: 
 ### 1- Cholesky results are different from that of SVD and Sqrtm. SVD and Sqrtm are almost the same except for one entry in [23,24].
 ### 2- SVD takes about 2.5 seconds to compute while Sqrtm only takes about 0.5 seconds.
+'''
