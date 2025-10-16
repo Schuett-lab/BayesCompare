@@ -130,6 +130,10 @@ with torch.inference_mode():
             covs_extractor = modified_create_feature_extractor(model, return_nodes=set, cov_func=cov_funct)
             
             covs2 = covs_extractor(x_input)
+            
+            covs_extractor_new = BayesCompare.cov_extractor(model, return_nodes=set)
+            
+            covs3 = covs_extractor_new(x_input)
 
             #torch.save(feats, "/home/sezan/Documents/BayesCompare/outputs/activations/feats_trial_model"+str(model_num)+"_set"+str(set_num)+".pth")
             
