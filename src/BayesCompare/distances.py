@@ -20,6 +20,9 @@ def wasserstein(sigma1, sigma2, mu1=None, mu2=None):
     tr_term = sigma1 + sigma2 - 2*(sig1_sig2_sqrt) 
     d_sq = means_term + np.trace(tr_term)
     
+    if abs(d_sq)<1e-7:
+        d_sq = 0
+        
     return d_sq**0.5
 
 def hellinger(sigma1, sigma2, mu1=None, mu2=None):
