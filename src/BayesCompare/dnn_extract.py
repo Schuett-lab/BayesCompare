@@ -416,31 +416,40 @@ def cov_extractor(
         # Find nodes corresponding to return_nodes and make them into output_nodes
         nodes = [n for n in graph_module.graph.nodes]
         output_nodes = OrderedDict()
+        
+        # iterate over a snapshot of keys since we pop inside the loop
+        pending_queries = list(mode_return_nodes[mode].keys())
+        
         for n in reversed(nodes):
             module_qualname = tracer.node_to_qualname.get(n)
             if module_qualname is None:
-                # NOTE - Know cases where this happens:
-                # - Node representing creation of a tensor constant - probably
-                #   not interesting as a return node
-                # - When packing outputs into a named tuple like in InceptionV3
                 continue
-            for query in mode_return_nodes[mode]:
+            for query in pending_queries:
                 depth = query.count(".")
                 if ".".join(module_qualname.split(".")[: depth + 1]) == query:
-                    #---- my insertion
+                    
+                    # Insert cov node after the activation node and collect it
                     cov_node = _wrap_with_cov(graph_module, n)
                     output_nodes[mode_return_nodes[mode][query]] = cov_node
-                    #---- my insertion ends
-                    #output_nodes[mode_return_nodes[mode][query]] = n
+                    
+                    # remove from both our snapshot and the dict
+                    pending_queries.remove(query)
                     mode_return_nodes[mode].pop(query)
+                    
                     break
+        
+        # Keep ordering stable
         output_nodes = OrderedDict(reversed(list(output_nodes.items())))
         
-        # And add them in the end of the graph
-        with graph_module.graph.inserting_after(nodes[-1]):
+        # Refresh the graph tail after all cov nodes were inserted,
+        # then append the output node at the real end of the graph
+        graph_module.graph.lint()
+        
+        nodes_after = [n for n in graph_module.graph.nodes]
+        with graph_module.graph.inserting_after(nodes_after[-1]):
             graph_module.graph.output(output_nodes)
         
-        # Remove unused modules / parameters
+        graph_module.graph.lint()
         graph_module.graph.eliminate_dead_code()
         graph_module.recompile()
 

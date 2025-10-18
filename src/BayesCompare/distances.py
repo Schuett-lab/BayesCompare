@@ -294,8 +294,14 @@ def measure_dist(covs, checkpoint_dir, mean=None, meas_name='TVD', alpha=None, b
                 save_checkpoint(dist, name, i, checkpoint_dir)
         
         dist_dict[name] = dist
-        
-    return dist_dict            
+    
+    # if a single measure is asked, return only a dist matrix
+    if len(meas_name)==1:
+        return dist_dict[meas_name[0]]
+    
+    # if multiple measures are asked, return a dict of dist matrices
+    else:    
+        return dist_dict            
 
 ## Helper functions
 
