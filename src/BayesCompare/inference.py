@@ -1,8 +1,10 @@
 import numpy as np
-from numpy.typing import NDArray
-from typing import Optional
+
 from scipy.linalg import pinv
 from scipy.special import logsumexp
+
+from typing import Optional
+from numpy.typing import NDArray
 
 
 def inference(cov, y_train, alpha: float = 0.1):
