@@ -2,6 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 from typing import Optional
 from scipy.linalg import pinv
+from scipy.special import logsumexp
 
 
 def inference(cov, y_train, alpha: float = 0.1):
@@ -133,17 +134,17 @@ def evidence(cov: NDArray, y: NDArray, mu: Optional[NDArray] = None) -> float:
     Parameters
     ----------
 
-    cov: np.array, shape (n_stim, n_stim)
+    cov: NDArray, shape (n_stim, n_stim)
         Normalized covariance matrix coming from the model X (i.e. X^TX).
         It describes the covariance of the different experimental conditions
         with respect to the different measurement channels
 
-    y: np.array, shape (n_stim,)
+    y: NDArray, shape (n_stim,)
         Activation profile of a single measurement channel for each experimental
         condition. In the case of fMRI, it represents the activations of a
         single voxel across the space of experimental conditions or stimuli
 
-    mu: np.array or None, default None
+    mu: NDArray or None, default None
         Mean activation from the corresponding measurement channel
 
     Returns
@@ -162,3 +163,30 @@ def evidence(cov: NDArray, y: NDArray, mu: Optional[NDArray] = None) -> float:
     logdet = np.linalg.slogdet(inner_inv)
     loglik = logdet.logabsdet / 2 - ss / 2 - N / 2 * np.log(2 * np.pi)
     return loglik
+
+
+def posterior(loglik_array: NDArray) -> NDArray:
+    """
+    Obtain the posterior probabilities that a given model produces the activations
+    observed from a certain measure (voxel or model)
+
+    Parameters
+    ----------
+
+    loglik_array: NDArray, shape (n_channels, n_models)
+        Each row represents a measurement channel from a and every row represents
+        one of the candidate models. Each element is the log-likelihood of each
+        candidate model producing the observed activation in the corresponding
+        measurement channel
+
+    Returns
+    -------
+
+    post_array: NDArray, shape (n_channels, n_models)
+        Each element represents the posterior probability of each of the candidate
+        models producing the observed activation in each channel
+    """
+
+    post_array = loglik_array - logsumexp(loglik_array, axis=1, keepdims=True)
+
+    return post_array
