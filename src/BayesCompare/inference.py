@@ -3,8 +3,8 @@ import numpy as np
 from scipy.linalg import pinv
 from scipy.special import logsumexp
 
-from typing import Optional
 from numpy.typing import NDArray
+from typing import Optional
 
 
 def inference(cov, y_train, alpha: float = 0.1):
