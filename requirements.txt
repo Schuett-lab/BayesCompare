@@ -1,8 +1,9 @@
-# torchvision>=0.15.2
-# pytorch>=2.1.0
+torchvision>=0.15.2
+pytorch>=2.1.0
 # python 3.11
 scipy>=1.13
 numpy>=1.26
 tqdm>=4
 matplotlib>=3.8
 scikit-learn>=1.2
+pytest>=4.8
