@@ -10,7 +10,7 @@ import pathlib
 import numpy as np
 from numpy.testing import assert_almost_equal
 
-from scripts.nsd_loglikscore import loglik_score
+from BayesCompare.inference import loglik_score
 
 
 def read_sample_file(file_path):

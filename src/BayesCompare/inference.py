@@ -3,6 +3,7 @@ import numpy as np
 from joblib import Parallel, delayed
 from scipy.linalg import pinv
 from scipy.special import logsumexp
+from tqdm import tqdm
 
 from numpy.typing import NDArray
 from typing import Optional
