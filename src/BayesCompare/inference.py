@@ -1,5 +1,6 @@
 import numpy as np
 
+from joblib import Parallel, delayed
 from scipy.linalg import pinv
 from scipy.special import logsumexp
 
@@ -165,6 +166,81 @@ def evidence(cov: NDArray, y: NDArray, mu: Optional[NDArray] = None) -> float:
     logdet = np.linalg.slogdet(inner_inv)
     loglik = logdet.logabsdet / 2 - ss / 2 - N / 2 * np.log(2 * np.pi)
     return loglik
+
+
+def loglik_score(
+    norm_covs: list[NDArray],
+    activations: NDArray,
+    total_var: NDArray,
+    eps_var: NDArray,
+    n_jobs: int = -1,
+) -> NDArray:
+    """
+    Estimate the log-likelihood of the mean activation of a list of measurement
+    channels across a number of potential models.
+
+    Parameters
+    ----------
+
+    norm_covs: list[np.array], len (n_models,)[shape (n_stim, n_stim)]
+        List containing the covariance matrices corresponding to the different
+        models. The covariance matrices must be normalized so they trace is
+        equal to N, with N being the number of stimuli. Each covariance matrix
+        has shape (N, N)
+
+    activations: np.array, shape (n_channels, n_stim)
+        Mean activation for a list of measurement channels in response to a list
+        of stimuli
+
+    total_var: np.array, shape (n_channels,)
+        Total variance of each measurement channel across all stimuli
+
+    eps_var: np.array, shape (n_channels,)
+        Estimated variance attributed to noise for each measurement channel
+        across all stimuli
+
+    n_jobs: int, default = -1
+        Parameter passed to joblib for parallelization
+
+    Returns
+    -------
+
+    loglik_score: np.array, shape (n_channels, n_models)
+        Log-likelihood score for each measurement channel and candidate model
+
+    """
+    # Handle the single voxel case for iteration to work:
+    if activations.ndim == 1:
+        activations = np.expand_dims(activations, axis=0)
+        total_var = np.expand_dims(total_var, axis=0)
+        eps_var = np.expand_dims(eps_var, axis=0)
+
+    # Same for single model
+    if not isinstance(norm_covs, list):
+        norm_covs = [norm_covs]
+
+    def voxel_loop(norm_covs, y, sigma_tot, sigma_e):
+        """Run evidence on one voxel and all models"""
+        sigma_b = sigma_tot - sigma_e
+
+        model_score = []  # One voxel, all layers
+        for norm_cov in norm_covs:
+            s_cov = sigma_cov(norm_cov, sigma_b=sigma_b, sigma_e=sigma_e)
+            ev = evidence(s_cov, y)
+            model_score.append(ev.flatten())
+
+        return np.concatenate(model_score)
+
+    model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
+        delayed(voxel_loop)(norm_covs, y, sigma_tot, sigma_e)
+        for y, sigma_tot, sigma_e in tqdm(
+            zip(activations, total_var, eps_var), total=activations.shape[0]
+        )
+    )  # All voxels, all layers
+
+    loglik_score = np.stack(model_scores)
+
+    return loglik_score
 
 
 def posterior(loglik_array: NDArray) -> NDArray:
