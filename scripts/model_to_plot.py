@@ -498,7 +498,7 @@ plt.tight_layout()
 plt.savefig("figures/resnet50_results/all_layers/avg_dist_comparison_allresnets_alllayers_retrieval.svg", dpi=400)
 '''
 ## conv vs bn vs relu
-
+'''
 import seaborn as sns
 import pandas as pd
 
@@ -598,3 +598,122 @@ for ax, meas, palette in zip(
  
 plt.tight_layout()
 plt.savefig("figures/resnet50_results/all_layers/wasserstein_jsd_conv_bn_relu_corrected_comparison.svg", dpi=400)
+'''
+
+# conv vs bn vs relu vs downsample vs avgpool vs fc
+import seaborn as sns
+import pandas as pd
+
+stacks_wass = np.load('stacked_diagswasserstein.npy')
+stacks_jsd = np.load('stacked_diagsJSD.npy')
+
+model5 = torchvision.models.get_model("resnet50", weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
+model_layers, _ = get_graph_node_names(model5)
+
+conv_idx = []
+bn_idx = []
+relu_idx = []
+downsample_idx = []
+maxpool_idx = []
+avgpool_idx = []
+fc_idx = []
+
+for i, layer_name in enumerate(model_layers):
+    if 'conv' in layer_name:
+        conv_idx.append(i)
+    elif 'bn' in layer_name:
+        bn_idx.append(i)
+    elif 'relu' in layer_name:
+        relu_idx.append(i)
+    elif 'downsample' in layer_name:
+        downsample_idx.append(i)
+    elif 'avgpool' in layer_name:
+        avgpool_idx.append(i)
+    elif 'fc' in layer_name:
+        fc_idx.append(i)
+
+conv_wass = stacks_wass[:, conv_idx]
+bn_wass = stacks_wass[:, bn_idx]
+relu_wass = stacks_wass[:, relu_idx]
+downsample_wass = stacks_wass[:, downsample_idx]
+avgpool_wass = stacks_wass[:, avgpool_idx]
+fc_wass = stacks_wass[:, fc_idx]
+
+conv_jsd = stacks_jsd[:, conv_idx]
+bn_jsd = stacks_jsd[:, bn_idx]
+relu_jsd = stacks_jsd[:, relu_idx]
+downsample_jsd = stacks_jsd[:, downsample_idx]
+avgpool_jsd = stacks_jsd[:, avgpool_idx]
+fc_jsd = stacks_jsd[:, fc_idx]
+
+def to_rows(arr, measure, layer):
+    return [(measure, layer, float(v)) for v in np.asarray(arr).ravel()]
+ 
+rows = []
+rows += to_rows(conv_wass, "Wasserstein", "conv")
+rows += to_rows(bn_wass, "Wasserstein", "bn")
+rows += to_rows(relu_wass, "Wasserstein", "relu")
+rows += to_rows(downsample_wass, "Wasserstein", "downsample")
+rows += to_rows(avgpool_wass, "Wasserstein", "avgpool")
+rows += to_rows(fc_wass, "Wasserstein", "fc")
+
+rows += to_rows(conv_jsd, "JSD", "conv")
+rows += to_rows(bn_jsd, "JSD", "bn")
+rows += to_rows(relu_jsd, "JSD", "relu")
+rows += to_rows(downsample_jsd, "JSD", "downsample")
+rows += to_rows(avgpool_jsd, "JSD", "avgpool")
+rows += to_rows(fc_jsd, "JSD", "fc")
+ 
+df = pd.DataFrame(rows, columns=["measure", "layer", "value"])
+df["x"] = df["measure"] + "_" + df["layer"]
+ 
+order = ["Wasserstein_conv", "Wasserstein_bn", "Wasserstein_relu", "Wasserstein_downsample", "Wasserstein_avgpool", "Wasserstein_fc", 
+         "JSD_conv", "JSD_bn", "JSD_relu", "JSD_downsample", "JSD_avgpool", "JSD_fc"]
+
+df["x"] = pd.Categorical(df["x"], categories=order, ordered=True)
+
+cat_order = ["conv", "bn", "relu", "downsample", "avgpool", "fc"]
+
+fig, axes = plt.subplots(1, 2, figsize=(18, 10))
+
+for ax, meas, palette in zip(
+    axes,
+    ["Wasserstein", "JSD"],
+    ["Reds", "Blues"]
+):
+    d = df[df["measure"] == meas].copy()
+ 
+    d["layer"] = pd.Categorical(d["layer"], categories=cat_order, ordered=True)
+ 
+    # --- swarm points ---
+    sns.swarmplot(data=d, x="layer", y="value", order=cat_order,
+                  palette=palette, size=4, ax=ax)
+    sns.violinplot(data=d, x="layer", y="value", order=cat_order,
+    palette=palette, inner=None, linewidth=0, cut=0, ax=ax, alpha=0.25)
+    
+    means = (
+        d.groupby("layer")["value"].mean()
+         .reindex(cat_order)          
+    )
+ 
+    ax.scatter(
+        means.index, means.values,
+        s=120, marker="o",       
+        facecolor="gray", edgecolor="black", linewidth=1.6,
+        zorder=10, label="Mean"
+    )
+ 
+    # clean axis labels
+    ax.set_xlabel("")                   
+    ax.set_ylabel("Distance")
+    ax.set_xticklabels(cat_order)
+    ax.yaxis.grid(True, which='major', color='lightgray', linestyle='-', linewidth=0.7)
+    ax.set_axisbelow(True)
+ 
+    # add group label UNDER the ticks
+    fig.subplots_adjust(bottom=0.22)
+    ax.text(0.5, -0.03, meas, transform=ax.transAxes,
+            ha="center", va="top", fontsize=12)
+ 
+plt.tight_layout()
+plt.savefig("figures/resnet50_results/all_layers/wasserstein_jsd_allayers_comparison.svg", dpi=400)
