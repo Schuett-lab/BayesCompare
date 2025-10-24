@@ -348,7 +348,7 @@ np.save("dist_wasserstein_1000_all_resnets_all_layers.npy", dist['wasserstein'])
 np.save("dist_JSD_1000_all_resnets_all_layers.npy", dist['JSD'])
 '''
 ## Directly from saved distances
-
+'''
 means = []
 stds = []
 
@@ -426,26 +426,45 @@ for dist_name in dist_names:
 
     stack_diags = np.zeros((int(m*(m-1)/2), n))
 
+    fifth_model_idx = [4,9,14,19]
+    
     for i in idx:
         diags = np.diag(blocks[i])
         stack_diags[model_idx, :] = diags
-        plt.plot(range(n), diags, '.-', linewidth=1, markersize=5, label="Model "+model_names[model_idx][0]+" vs Model "+model_names[model_idx][2], color=cmap(model_idx))
-        model_idx += 1
         
+        if i in fifth_model_idx:
+            col = 'red'
+        else:
+            col='black'
+            
+        plt.plot(range(n), diags, '.-', linewidth=1, markersize=5, label="Model "+model_names[model_idx][0]+" vs Model "+model_names[model_idx][2], color=col)
+        
+        #plt.plot(range(n), diags, '.-', linewidth=1, markersize=5, label="Model "+model_names[model_idx][0]+" vs Model "+model_names[model_idx][2], color=cmap(model_idx))
+        model_idx += 1
+    
     plt.xlabel("Layer")
     plt.xticks(ticks=range(n), labels=model_layers, rotation=90, fontsize=6)
     plt.grid(axis='x', color='gray', alpha=0.3, linewidth=0.5)
     plt.ylabel(dist_name.capitalize()+" Distance")
     plt.legend()
     plt.tight_layout()
-    plt.savefig("figures/resnet50_results/all_layers/dist_"+dist_name+"_allresnets_alllayers_retrieval.svg", dpi=400)
+    plt.savefig("figures/resnet50_results/all_layers/compare_model5_dist_"+dist_name+"_allresnets_alllayers_retrieval.svg", dpi=400)
+    
+    np.save('stacked_diags'+dist_name+'.npy', stack_diags)
     
     mean = stack_diags.mean(axis=0)
     var = stack_diags.var(axis=0, ddof=1)
     std = np.sqrt(var)
     
-    means.append(mean)
-    stds.append(std)
+    if dist_name == 'wasserstein':
+        norm_mean = mean/np.max(mean)
+        means.append(norm_mean)
+        norm_std = std/np.max(std)
+        stds.append(norm_std)
+    
+    else:
+        means.append(mean)
+        stds.append(std)
 
     plt.figure(figsize=(14, 6), dpi=400)
 
@@ -477,3 +496,105 @@ plt.ylabel("Distance")
 plt.legend()
 plt.tight_layout()
 plt.savefig("figures/resnet50_results/all_layers/avg_dist_comparison_allresnets_alllayers_retrieval.svg", dpi=400)
+'''
+## conv vs bn vs relu
+
+import seaborn as sns
+import pandas as pd
+
+stacks_wass = np.load('stacked_diagswasserstein.npy')
+stacks_jsd = np.load('stacked_diagsJSD.npy')
+
+model5 = torchvision.models.get_model("resnet50", weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
+model_layers, _ = get_graph_node_names(model5)
+
+conv_idx = []
+bn_idx = []
+relu_idx = []
+for i, layer_name in enumerate(model_layers):
+    if 'conv' in layer_name:
+        conv_idx.append(i)
+    elif 'bn' in layer_name:
+        bn_idx.append(i)
+    elif 'relu' in layer_name:
+        relu_idx.append(i)
+
+conv_wass = stacks_wass[:, conv_idx]
+bn_wass = stacks_wass[:, bn_idx]
+relu_wass = stacks_wass[:, relu_idx]
+
+conv_jsd = stacks_jsd[:, conv_idx]
+bn_jsd = stacks_jsd[:, bn_idx]
+relu_jsd = stacks_jsd[:, relu_idx]
+
+def to_rows(arr, measure, layer):
+    return [(measure, layer, float(v)) for v in np.asarray(arr).ravel()]
+ 
+rows = []
+rows += to_rows(conv_wass, "Wasserstein", "conv")
+rows += to_rows(bn_wass, "Wasserstein", "bn")
+rows += to_rows(relu_wass, "Wasserstein", "relu")
+rows += to_rows(conv_jsd, "JSD", "conv")
+rows += to_rows(bn_jsd, "JSD", "bn")
+rows += to_rows(relu_jsd, "JSD", "relu")
+ 
+df = pd.DataFrame(rows, columns=["measure", "layer", "value"])
+df["x"] = df["measure"] + "_" + df["layer"]
+ 
+order = ["Wasserstein_conv", "Wasserstein_bn", "Wasserstein_relu", "JSD_conv", "JSD_bn", "JSD_relu"]
+df["x"] = pd.Categorical(df["x"], categories=order, ordered=True)
+
+# palette: warm for A, cool for B
+pal = sns.color_palette("Reds", 3) + sns.color_palette("Blues", 3)
+
+cat_order = ["conv", "bn", "relu"]
+
+fig, axes = plt.subplots(1, 2, figsize=(18, 10))
+
+for ax, meas, palette in zip(
+    axes,
+    ["Wasserstein", "JSD"],
+    ["Reds", "Blues"]
+):
+    d = df[df["measure"] == meas].copy()
+ 
+    # make the x a *fresh* categorical with only the 3 cats
+    d["layer"] = pd.Categorical(d["layer"], categories=cat_order, ordered=True)
+ 
+    # plot (choose one: swarm only, or violin+swarm overlay)
+    # --- violin behind (optional) ---
+    # sns.violinplot(data=d, x="layer", y="value", order=cat_order,
+    #                inner="quartile", cut=0, linewidth=1, saturation=0.9,
+    #                color=sns.color_palette(palette, 4)[2], ax=ax)
+    # --- swarm points ---
+    sns.swarmplot(data=d, x="layer", y="value", order=cat_order,
+                  palette=palette, size=4, ax=ax)
+    sns.violinplot(data=d, x="layer", y="value", order=cat_order,
+    palette=palette, inner=None, linewidth=0, cut=0, ax=ax, alpha=0.25)
+    
+    means = (
+        d.groupby("layer")["value"].mean()
+         .reindex(cat_order)          # ensure cat1, cat2, cat3 order
+    )
+ 
+    ax.scatter(
+        means.index, means.values,
+        s=120, marker="o",            # big diamond marker
+        facecolor="gray", edgecolor="black", linewidth=1.6,
+        zorder=10, label="Mean"
+    )
+ 
+    # clean axis labels
+    ax.set_xlabel("")                     # only show cat1/cat2/cat3
+    ax.set_ylabel("Distance")
+    ax.set_xticklabels(cat_order)
+    ax.yaxis.grid(True, which='major', color='lightgray', linestyle='-', linewidth=0.7)
+    ax.set_axisbelow(True)
+ 
+    # add group label UNDER the ticks
+    fig.subplots_adjust(bottom=0.22)
+    ax.text(0.5, -0.03, meas, transform=ax.transAxes,
+            ha="center", va="top", fontsize=12)
+ 
+plt.tight_layout()
+plt.savefig("figures/resnet50_results/all_layers/wasserstein_jsd_conv_bn_relu_corrected_comparison.svg", dpi=400)
