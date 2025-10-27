@@ -130,23 +130,23 @@ covs = np.load("covs_1000.npy")
 #covs = np.stack(covs)
 #covs = covs.reshape(covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3])
 #start = time.time()
-dist = BayesCompare.measure_dist(covs, checkpoint_dir="/home/sezan/Documents/BayesCompare/dist_nonparallelized_checkpoints/", meas_name=['JSD'], alpha=10/11)
+#dist = BayesCompare.measure_dist(covs, checkpoint_dir="/home/sezan/Documents/BayesCompare/dist_nonparallelized_checkpoints/", meas_name=['JSD'], alpha=10/11)
 #end1 = time.time()
-dist2 = BayesCompare.parallelized_measure_dist(covs, checkpoint_dir="/home/sezan/Documents/BayesCompare/dist_parallelized_checkpoints/", meas_name=['JSD'], alpha=10/11, n_jobs=10)
+dist2 = BayesCompare.parallel_measure_dist(covs, checkpoint_dir="/home/sezan/Documents/BayesCompare/dist_parallelized_checkpoints/", meas_name=['JSD', 'wasserstein'], alpha=10/11, n_jobs=10)
 #end2 = time.time()
 
 #print('Non-parallel JSD duration: ', str(end1-start))
 #print('Parallel JSD duration: ', str(end2-end1))
 #np.save('dist_jsd_nonparallel_covs_1000.npy', dist)
 #np.save('dist_jsd_parallel_covs_1000.npy', dist2)
-
+'''
 
 import matplotlib.pyplot as plt
 
 #dist = np.load('dist_jsd_nonparallel_covs_1000.npy')
 
 plt.figure()
-plt.imshow(dist, "bone", vmin=0, vmax=np.max(dist))
+plt.imshow(dist2, "bone", vmin=0, vmax=np.max(dist2))
 plt.colorbar()
 ax = plt.gca()
 ax.set_axis_off()
@@ -154,11 +154,11 @@ plt.title("Non-parallel JSD")
 plt.show()
 
 plt.figure()
-plt.imshow(dist2, "bone", vmin=0, vmax=np.max(dist))
+plt.imshow(dist2, "bone", vmin=0, vmax=np.max(dist2))
 plt.colorbar()
 ax = plt.gca()
 ax.set_axis_off()
 plt.title("Parallel JSD")
 plt.show()
-
+'''
 1+1

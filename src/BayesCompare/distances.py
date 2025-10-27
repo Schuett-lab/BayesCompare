@@ -4,7 +4,7 @@ from scipy.linalg.blas import dtrmm as mm
 import tqdm
 import os
 import glob
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, Memory
 
 ## Metrics
 
@@ -307,6 +307,8 @@ def measure_dist(covs, checkpoint_dir, mean=None, meas_name='TVD', alpha=None, b
 
 def parallel_measure_dist(covs, checkpoint_dir, mean=None, meas_name='TVD', alpha=None, b=1/100, n_jobs=-1): # what should be n-jobs default?
     
+    memory = Memory(location=checkpoint_dir, verbose=0)
+    
     # check if a single string or a list of strings is given in the meas_name
     if isinstance(meas_name, str):
         meas_name = [meas_name]
@@ -340,22 +342,24 @@ def parallel_measure_dist(covs, checkpoint_dir, mean=None, meas_name='TVD', alph
         elif name=='bhattacharyya':
             measure = bhattacharyya
         
-        def compute_pairwise_dist(i, j):
+        @memory.cache
+        def compute_pairwise_dist(i, j, meas):
             
             mi = norm_sigmas[i]
             mj = norm_sigmas[j]
             
             if measure in {jsd, tvd}:
-                val = measure(mi, mj, N=5000)
+                val = meas(mi, mj, N=5000)
             else:
-                val = measure(mi, mj)
+                val = meas(mi, mj)
             return (i, j, val)
         
         upper_pairs = [(i, j) for i in range(N) for j in range(i + 1, N)]
         
-        dist_list = Parallel(n_jobs=n_jobs, backend="loky", verbose=10)(delayed(compute_pairwise_dist)(i, j) for (i, j) in upper_pairs)
+        dist_list = Parallel(n_jobs=n_jobs, backend="loky", verbose=10)(delayed(compute_pairwise_dist)(i, j, measure) for (i, j) in upper_pairs)
         
         dist = np.zeros((N, N), dtype=float)
+        
         for i, j, v in dist_list:
             dist[i, j] = v
             dist[j, i] = v
