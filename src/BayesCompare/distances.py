@@ -4,6 +4,7 @@ from scipy.linalg.blas import dtrmm as mm
 import tqdm
 import os
 import glob
+from joblib import Parallel, delayed
 
 ## Metrics
 
@@ -302,6 +303,73 @@ def measure_dist(covs, checkpoint_dir, mean=None, meas_name='TVD', alpha=None, b
     # if multiple measures are asked, return a dict of dist matrices
     else:    
         return dist_dict            
+
+
+def parallel_measure_dist(covs, checkpoint_dir, mean=None, meas_name='TVD', alpha=None, b=1/100, n_jobs=-1): # what should be n-jobs default?
+    
+    # check if a single string or a list of strings is given in the meas_name
+    if isinstance(meas_name, str):
+        meas_name = [meas_name]
+    
+    N=len(covs)
+    
+    dist_dict = {}
+    
+    norm_sigmas = Parallel(n_jobs=n_jobs, backend="loky")(delayed(trace_norm)(covs[i], alpha) for i in range(N))
+    
+    for name in meas_name:
+        
+        if alpha==None:
+            alpha = N * b / (1 + (N * b))
+            
+        if name=='wasserstein':
+            measure = wasserstein
+            
+        elif name=='hellinger':
+            measure = hellinger
+        
+        elif name=='TVD':
+            measure = tvd
+        
+        elif name=='JSD':
+            measure = jsd
+        
+        elif name=='KL_div':
+            measure = KL_div
+            
+        elif name=='bhattacharyya':
+            measure = bhattacharyya
+        
+        def compute_pairwise_dist(i, j):
+            
+            mi = norm_sigmas[i]
+            mj = norm_sigmas[j]
+            
+            if measure in {jsd, tvd}:
+                val = measure(mi, mj, N=5000)
+            else:
+                val = measure(mi, mj)
+            return (i, j, val)
+        
+        upper_pairs = [(i, j) for i in range(N) for j in range(i + 1, N)]
+        
+        dist_list = Parallel(n_jobs=n_jobs, backend="loky", verbose=10)(delayed(compute_pairwise_dist)(i, j) for (i, j) in upper_pairs)
+        
+        dist = np.zeros((N, N), dtype=float)
+        for i, j, v in dist_list:
+            dist[i, j] = v
+            dist[j, i] = v
+        
+        dist_dict[name] = dist
+    
+    # if a single measure is asked, return only a dist matrix
+    if len(meas_name)==1:
+        return dist_dict[meas_name[0]]
+    
+    # if multiple measures are asked, return a dict of dist matrices
+    else:    
+        return dist_dict 
+
 
 ## Helper functions
 

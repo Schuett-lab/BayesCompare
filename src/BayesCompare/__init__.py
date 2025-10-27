@@ -8,5 +8,6 @@ from .inference import inference
 from .inference import evidence
 from .inference import inference_cov
 from .distances import measure_dist
+from .distances import parallel_measure_dist
 from . import others
 

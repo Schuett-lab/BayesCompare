@@ -3,7 +3,8 @@ import scipy.linalg
 from scipy.linalg.blas import dtrmm as mm
 import tqdm
 import time
-
+import BayesCompare
+import pickle
 
 def sqrt_w_svd(A):
     
@@ -108,3 +109,56 @@ for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
 ### 1- Cholesky results are different from that of SVD and Sqrtm. SVD and Sqrtm are almost the same except for one entry in [23,24].
 ### 2- SVD takes about 2.5 seconds to compute while Sqrtm only takes about 0.5 seconds.
 '''
+
+## Trying the parallelized meas_dist
+
+# with open('covs_1000_all_resnets_all_layers.pkl', "rb") as f:
+#     covs_names = pickle.load(f)
+
+# covs = []
+
+# for cov_dict in covs_names:
+    
+#     covs.append(list(cov_dict.values()))
+#     layer_names = list(cov_dict.keys())
+
+
+import time
+
+covs = np.load("covs_1000.npy")
+
+#covs = np.stack(covs)
+#covs = covs.reshape(covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3])
+#start = time.time()
+dist = BayesCompare.measure_dist(covs, checkpoint_dir="/home/sezan/Documents/BayesCompare/dist_nonparallelized_checkpoints/", meas_name=['JSD'], alpha=10/11)
+#end1 = time.time()
+dist2 = BayesCompare.parallelized_measure_dist(covs, checkpoint_dir="/home/sezan/Documents/BayesCompare/dist_parallelized_checkpoints/", meas_name=['JSD'], alpha=10/11, n_jobs=10)
+#end2 = time.time()
+
+#print('Non-parallel JSD duration: ', str(end1-start))
+#print('Parallel JSD duration: ', str(end2-end1))
+#np.save('dist_jsd_nonparallel_covs_1000.npy', dist)
+#np.save('dist_jsd_parallel_covs_1000.npy', dist2)
+
+
+import matplotlib.pyplot as plt
+
+#dist = np.load('dist_jsd_nonparallel_covs_1000.npy')
+
+plt.figure()
+plt.imshow(dist, "bone", vmin=0, vmax=np.max(dist))
+plt.colorbar()
+ax = plt.gca()
+ax.set_axis_off()
+plt.title("Non-parallel JSD")
+plt.show()
+
+plt.figure()
+plt.imshow(dist2, "bone", vmin=0, vmax=np.max(dist))
+plt.colorbar()
+ax = plt.gca()
+ax.set_axis_off()
+plt.title("Parallel JSD")
+plt.show()
+
+1+1
