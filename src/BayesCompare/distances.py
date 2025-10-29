@@ -5,6 +5,7 @@ import tqdm
 import os
 import glob
 from joblib import Parallel, delayed, Memory
+import torch
 
 ## Metrics
 
@@ -20,6 +21,37 @@ def wasserstein(sigma1, sigma2, mu1=None, mu2=None):
     sig1_sig2_sqrt = scipy.linalg.sqrtm(sig1_sqrt @ sigma2 @ sig1_sqrt)
     tr_term = sigma1 + sigma2 - 2*(sig1_sig2_sqrt) 
     d_sq = means_term + np.trace(tr_term)
+    
+    if d_sq<0 and d_sq>-1e-7:
+        d_sq = 0
+    
+    elif d_sq < -1e-7:
+        raise ValueError(f"Wasserstein distance cannot be negative. Value is: {d_sq}")
+    
+    return d_sq**0.5
+
+def wasserstein_torch_comp(sigma1, sigma2, mu1=None, mu2=None):
+    
+    # these conditions do not check for one mean is non zero and other is zero !!!
+    if mu1 is not None and mu2 is not None:
+        means_term = np.linalg.norm(mu1 - mu2, 2)**2
+    else:
+        means_term=0
+    
+    if type(sigma1) != torch.Tensor:
+        sigma1 = torch.tensor(sigma1)
+    if type(sigma2) != torch.Tensor:
+        sigma2 = torch.tensor(sigma2)
+        
+    E_sig1, V_sig1 = torch.linalg.eigh(sigma1)
+    sig1_sqrt = (V_sig1 * torch.sqrt(E_sig1)) @ V_sig1.T
+    
+    sig12 = sig1_sqrt @ sigma2 @ sig1_sqrt
+    E_sig12, V_sig12 = torch.linalg.eigh(sig12)
+    sig1_sig2_sqrt = (V_sig12 * torch.sqrt(E_sig12)) @ V_sig12.T
+    
+    tr_term = sigma1 + sigma2 - 2*(sig1_sig2_sqrt) 
+    d_sq = means_term + torch.trace(tr_term)
     
     if d_sq<0 and d_sq>-1e-7:
         d_sq = 0
@@ -50,6 +82,11 @@ def mahalanobis(sigma1, sigma2, mu1=None, mu2=None): # not the true mahalanobis 
     
 
 gen = np.random.Generator(np.random.SFC64(42))
+
+if torch.cuda.is_available():
+    gen_torch = torch.Generator(device='cuda').manual_seed(42)
+else:
+    gen_torch = torch.Generator(device='cpu').manual_seed(42)
 
 def jsd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen):
     
@@ -111,7 +148,71 @@ def jsd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen):
         
     return max(0, jsd)
 
+def jsd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen_torch):
+    
+    if type(sigma1) != torch.Tensor:
+        sigma1 = torch.tensor(sigma1)
+    if type(sigma2) != torch.Tensor:
+        sigma2 = torch.tensor(sigma2)
+        
+    if mu1 is None and mu2 is None:
+                    
+        k = sigma1.shape[0]
+        A1 = torch.linalg.cholesky(sigma1)
+        A2 = torch.linalg.cholesky(sigma2)
+        logdet1 = torch.sum(torch.log(torch.diag(A1)))
+        logdet2 = torch.sum(torch.log(torch.diag(A2)))
+        # generate random samples from each distribution
+        x10 = torch.randn((k, N), generator=gen)
+        x1 = torch.Tensor(mm(1, A1, x10, lower=1))
+        x20 = torch.randn((k, N), generator=gen)
+        x2 = torch.Tensor(mm(1, A2, x20, lower=1))
+        # compute densities for each
+        p1 = - torch.sum(x10 ** 2, 0) / 2 - logdet1
+        delta21 = torch.linalg.solve_triangular(A1, x2, upper=False)
+        p2 = - torch.sum(delta21 ** 2, 0) / 2 - logdet1
+        delta12 = torch.linalg.solve_triangular(A2, x1, upper=False)
+        q1 = - torch.sum(delta12 ** 2, 0) / 2 - logdet2
+        q2 = - torch.sum(x20 ** 2, 0) / 2 - logdet2
 
+        # log (P) - log (P + Q)
+        term1 = p1 - torch.logaddexp(p1, q1)
+        term2 = q2 - torch.logaddexp(p2, q2)
+
+        jsd = 1 + (torch.mean(term1) + torch.mean(term2)) / 2 / np.log(2)
+        
+        
+    else:
+        
+        k = len(mu1)
+        A1 = torch.linalg.cholesky(sigma1)
+        A2 = torch.linalg.cholesky(sigma2)
+
+        Ainv1 = torch.linalg.solve_triangular(A1, torch.eye(k), lower=True)
+        Ainv2 = torch.linalg.solve_triangular(A2, torch.eye(k), lower=True)
+        # generate random samples from each distribution
+        x1 = torch.Tensor.expand(mu1, 1) + A1 @ torch.randn((k, N), generator=gen)
+        x2 = torch.Tensor.expand(mu2, 1) + A2 @ torch.randn((k, N), generator=gen)
+        # compute densities for each
+        # removed factor 2 from these as it cancels
+        logdet1 = torch.sum(torch.log(torch.diag(A1)))
+        logdet2 = torch.sum(torch.log(torch.diag(A2)))
+        delta11 = Ainv1 @ (x1 - torch.Tensor.expand(mu1, 1)) 
+        p1 = - torch.sum(delta11 ** 2, 0) / 2 - logdet1
+        delta21 = Ainv1 @ (x2 - torch.Tensor.expand(mu1, 1))
+        p2 = - torch.sum(delta21 ** 2, 0) / 2 - logdet1
+        delta12 = Ainv2 @ (x1 - torch.Tensor.expand(mu2, 1))
+        q1 = - torch.sum(delta12 ** 2, 0) / 2 - logdet2
+        delta22 = Ainv2 @ (x2 - torch.Tensor.expand(mu2, 1))
+        q2 = - torch.sum(delta22 ** 2, 0) / 2 - logdet2
+
+        # log (P) - log (P + Q)
+        term1 = p1 - torch.logaddexp(p1, q1)
+        term2 = q2 - torch.logaddexp(p2, q2)
+
+        jsd = 1 + (torch.mean(term1) + torch.mean(term2)) / 2 / torch.log(2)
+        
+    return max(0, jsd) 
 
 def tvd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen):
 
@@ -164,6 +265,61 @@ def tvd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen):
     
     return max(0, tvd)
 
+def tvd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen_torch):
+    
+    if type(sigma1) != torch.Tensor:
+        sigma1 = torch.tensor(sigma1)
+    if type(sigma2) != torch.Tensor:
+        sigma2 = torch.tensor(sigma2)
+
+    if mu1 is not None and mu2 is not None:
+        k = len(mu1)
+        A1 = torch.linalg.cholesky(sigma1)
+        A2 = torch.linalg.cholesky(sigma2)
+        Ainv1 = torch.linalg.solve_triangular(A1, torch.eye(k), upper=False)
+        Ainv2 = torch.linalg.solve_triangular(A2, torch.eye(k), upper=False)
+        # generate random samples from each distribution
+        x1 = torch.Tensor.expand(mu1, 1) + A1 @ torch.randn((k, N), generator=gen)
+        x2 = torch.Tensor.expand(mu2, 1) + A2 @ torch.randn((k, N), generator=gen)
+        # compute densities for each
+        # removed factor 2 from these as it cancels
+        logdet1 = torch.sum(torch.log(torch.diag(A1)))
+        logdet2 = torch.sum(torch.log(torch.diag(A2)))
+        delta11 = Ainv1 @ (x1 - torch.Tensor.expand(mu1, 1))
+        p1 = - torch.sum(delta11 ** 2, 0) / 2 - logdet1
+        delta21 = Ainv1 @ (x2 - torch.Tensor.expand(mu1, 1))
+        p2 = - torch.sum(delta21 ** 2, 0) / 2 - logdet1
+        delta12 = Ainv2 @ (x1 - torch.Tensor.expand(mu2, 1))
+        q1 = - torch.sum(delta12 ** 2, 0) / 2 - logdet2
+        delta22 = Ainv2 @ (x2 - torch.Tensor.expand(mu2, 1))
+        q2 = - torch.sum(delta22 ** 2, 0) / 2 - logdet2
+        f1 = max(1 - torch.exp(q1-p1), 0)
+        f2 = max(1 - torch.exp(p2-q2), 0)
+        tvd = (torch.mean(f1) + torch.mean(f2)) / 2
+        
+    else:
+        k = sigma1.shape[0]
+        A1 = torch.linalg.cholesky(sigma1)
+        A2 = torch.linalg.cholesky(sigma2)
+        logdet1 = torch.sum(torch.log(torch.diag(A1)))
+        logdet2 = torch.sum(torch.log(torch.diag(A2)))
+        # generate random samples from each distribution
+        x10 = torch.randn((k, N), generator=gen)
+        x1 = torch.Tensor(mm(1, A1, x10, lower=1))
+        x20 = torch.randn((k, N), generator=gen)
+        x2 = torch.Tensor(mm(1, A2, x20, lower=1))
+        # compute densities for each
+        p1 = - torch.sum(x10 ** 2, 0) / 2 - logdet1
+        delta21 = torch.linalg.solve_triangular(A1, x2, upper=False)
+        p2 = - torch.sum(delta21 ** 2, 0) / 2 - logdet1
+        delta12 = torch.linalg.solve_triangular(A2, x1, upper=False)
+        q1 = - torch.sum(delta12 ** 2, 0) / 2 - logdet2
+        q2 = - torch.sum(x20 ** 2, 0) / 2 - logdet2
+        f1 = torch.max(1 - torch.exp(q1-p1), torch.zeros_like(q1))
+        f2 = torch.max(1 - torch.exp(p2-q2), torch.zeros_like(p2))
+        tvd = (torch.mean(f1) + torch.mean(f2)) / 2
+    
+    return max(0, tvd)
 
 ## Divergences
 
@@ -377,6 +533,40 @@ def parallel_measure_dist(covs, checkpoint_dir, mean=None, meas_name='TVD', alph
     else:    
         return dist_dict 
 
+def measure_dist_ver1(covs, mean=None, meas_name='TVD', alpha=None, b=1/100):
+    # no check points, no parallelization, single measure only and torch compatable
+    
+    N=len(covs)
+    
+    if alpha==None:
+        alpha = N * b / (1 + (N * b))
+        
+    measure = select_measure(meas_name)
+    
+    dist = np.zeros((N, N))
+            
+    progress_bar = tqdm.tqdm(total=int((N*(N-1))/2))
+    
+    for i, ci in enumerate(covs):
+        
+        sig1 = trace_norm(ci, eye_w=alpha)
+        
+        for j, cj in enumerate(covs):
+            
+            if j > i:
+
+                sig2 = trace_norm(cj, eye_w=alpha)
+                
+                if measure == jsd or measure == tvd:
+                    dist[i, j] = measure(sig1, sig2, N=10000) # not using mean, for a generalized code mean should be provided
+                else:
+                    dist[i, j] = measure(sig1, sig2) # not using mean, for a generalized code mean should be provided
+                    
+                dist[j, i] = dist[i, j]
+                
+                progress_bar.update(1)
+
+    return dist   
 
 ## Helper functions
 
@@ -389,6 +579,29 @@ def trace_norm(sigma, eye_w=0.001):
         A = ((1 - eye_w) * sigma * sigma.shape[0] / np.trace(sigma)) + (eye_w * np.eye(sigma.shape[0]))
     
     return A
+
+def select_measure(meas_name):
+    
+    if meas_name=='wasserstein':
+        measure = wasserstein
+        
+    elif meas_name=='hellinger':
+        measure = hellinger
+    
+    elif meas_name=='TVD':
+        measure = tvd
+    
+    elif meas_name=='JSD':
+        measure = jsd
+    
+    elif meas_name=='KL_div':
+        measure = KL_div
+        
+    elif meas_name=='bhattacharyya':
+        measure = bhattacharyya
+
+    return measure
+
 
 def save_checkpoint(dist, dist_name, i, directory):
     

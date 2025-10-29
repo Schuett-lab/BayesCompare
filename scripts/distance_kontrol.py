@@ -3,8 +3,7 @@ import scipy.linalg
 from scipy.linalg.blas import dtrmm as mm
 import tqdm
 import time
-import BayesCompare
-import pickle
+import torch
 
 def sqrt_w_svd(A):
     
@@ -110,55 +109,401 @@ for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
 ### 2- SVD takes about 2.5 seconds to compute while Sqrtm only takes about 0.5 seconds.
 '''
 
-## Trying the parallelized meas_dist
+## Comparing Wasserstein and Torch Compatible Wasserstein
 
-# with open('covs_1000_all_resnets_all_layers.pkl', "rb") as f:
-#     covs_names = pickle.load(f)
-
-# covs = []
-
-# for cov_dict in covs_names:
+'''
+def wasserstein(sigma1, sigma2, mu1=None, mu2=None):
     
-#     covs.append(list(cov_dict.values()))
-#     layer_names = list(cov_dict.keys())
+    # these conditions do not check for one mean is non zero and other is zero !!!
+    if mu1 is not None and mu2 is not None:
+        means_term = np.linalg.norm(mu1 - mu2, 2)**2
+    else:
+        means_term=0
+        
+    sig1_sqrt = scipy.linalg.sqrtm(sigma1)
+    sig1_sig2_sqrt = scipy.linalg.sqrtm(sig1_sqrt @ sigma2 @ sig1_sqrt)
+    tr_term = sigma1 + sigma2 - 2*(sig1_sig2_sqrt) 
+    d_sq = means_term + np.trace(tr_term)
+    
+    if d_sq<0 and d_sq>-1e-7:
+        d_sq = 0
+    
+    elif d_sq < -1e-7:
+        raise ValueError(f"Wasserstein distance cannot be negative. Value is: {d_sq}")
+    
+    return d_sq**0.5
 
+def wasserstein_torch_comp(sigma1, sigma2, mu1=None, mu2=None):
+    
+    # these conditions do not check for one mean is non zero and other is zero !!!
+    if mu1 is not None and mu2 is not None:
+        means_term = np.linalg.norm(mu1 - mu2, 2)**2
+    else:
+        means_term=0
+    
+    if type(sigma1) != torch.Tensor:
+        sigma1 = torch.tensor(sigma1)
+    if type(sigma2) != torch.Tensor:
+        sigma2 = torch.tensor(sigma2)
+        
+    E_sig1, V_sig1 = torch.linalg.eigh(sigma1)
+    sig1_sqrt = (V_sig1 * torch.sqrt(E_sig1)) @ V_sig1.T
+    
+    sig12 = sig1_sqrt @ sigma2 @ sig1_sqrt
+    E_sig12, V_sig12 = torch.linalg.eigh(sig12)
+    sig1_sig2_sqrt = (V_sig12 * torch.sqrt(E_sig12)) @ V_sig12.T
+    
+    tr_term = sigma1 + sigma2 - 2*(sig1_sig2_sqrt) 
+    d_sq = means_term + torch.trace(tr_term)
+    
+    if d_sq<0 and d_sq>-1e-7:
+        d_sq = 0
+    
+    elif d_sq < -1e-7:
+        raise ValueError(f"Wasserstein distance cannot be negative. Value is: {d_sq}")
+    
+    return d_sq**0.5
 
-import time
+covs = np.load("/home/sezan/Documents/BayesCompare/covs_1000.npy")
 
-covs = np.load("covs_1000.npy")
+alpha = 10/11
 
-#covs = np.stack(covs)
-#covs = covs.reshape(covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3])
-#start = time.time()
-#dist = BayesCompare.measure_dist(covs, checkpoint_dir="/home/sezan/Documents/BayesCompare/dist_nonparallelized_checkpoints/", meas_name=['JSD'], alpha=10/11)
-#end1 = time.time()
-dist2 = BayesCompare.parallel_measure_dist(covs, checkpoint_dir="/home/sezan/Documents/BayesCompare/dist_parallelized_checkpoints/", meas_name=['JSD', 'wasserstein'], alpha=10/11, n_jobs=10)
-#end2 = time.time()
+dist1 = np.zeros((len(covs), len(covs)))
+dist2 = np.zeros((len(covs), len(covs)))
 
-#print('Non-parallel JSD duration: ', str(end1-start))
-#print('Parallel JSD duration: ', str(end2-end1))
-#np.save('dist_jsd_nonparallel_covs_1000.npy', dist)
-#np.save('dist_jsd_parallel_covs_1000.npy', dist2)
+for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
+    
+    sig1 = trace_norm(ci, eye_w=alpha)
+    
+    for j, cj in tqdm.tqdm(enumerate(covs), total=len(covs), position=1):
+        
+        if j > i:
+            
+            sig2 = trace_norm(cj, eye_w=alpha)
+            
+            dist1[i, j] = wasserstein(sig1, sig2)
+            dist2[i, j] = wasserstein_torch_comp(sig1, sig2)
+
+            dist1[j, i] = dist1[i, j]
+            dist2[j, i] = dist2[i, j]
+
+diff_dist = dist1 - np.array(dist2)
+
+if abs(np.max(diff_dist)) < 1e-7:
+    print("Distances are the same!")
+
+# Result: Indeed the two wasserstein computation return the same result.
 '''
 
-import matplotlib.pyplot as plt
-
-#dist = np.load('dist_jsd_nonparallel_covs_1000.npy')
-
-plt.figure()
-plt.imshow(dist2, "bone", vmin=0, vmax=np.max(dist2))
-plt.colorbar()
-ax = plt.gca()
-ax.set_axis_off()
-plt.title("Non-parallel JSD")
-plt.show()
-
-plt.figure()
-plt.imshow(dist2, "bone", vmin=0, vmax=np.max(dist2))
-plt.colorbar()
-ax = plt.gca()
-ax.set_axis_off()
-plt.title("Parallel JSD")
-plt.show()
+# Comparing JSD and JSD torch compatable
 '''
-1+1
+# GPU-capable generator (falls back to CPU if CUDA unavailable)
+if torch.cuda.is_available():
+    gen_torch = torch.Generator(device='cuda').manual_seed(42)
+else:
+    gen_torch = torch.Generator(device='cpu').manual_seed(42)
+
+gen = np.random.Generator(np.random.SFC64(42))
+
+def jsd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen):
+    
+    if mu1 is None and mu2 is None:
+        k = sigma1.shape[0]
+        A1 = np.linalg.cholesky(sigma1)
+        A2 = np.linalg.cholesky(sigma2)
+        logdet1 = np.sum(np.log(np.diag(A1)))
+        logdet2 = np.sum(np.log(np.diag(A2)))
+        # generate random samples from each distribution
+        x10 = gen.standard_normal(size=(k, N))
+        x1 = mm(1, A1, x10, lower=1)
+        x20 = gen.standard_normal(size=(k, N))
+        x2 = mm(1, A2, x20, lower=1)
+        # compute densities for each
+        p1 = - np.sum(x10 ** 2, 0) / 2 - logdet1
+        delta21 = scipy.linalg.solve_triangular(A1, x2, lower=True)
+        p2 = - np.sum(delta21 ** 2, 0) / 2 - logdet1
+        delta12 = scipy.linalg.solve_triangular(A2, x1, lower=True)
+        q1 = - np.sum(delta12 ** 2, 0) / 2 - logdet2
+        q2 = - np.sum(x20 ** 2, 0) / 2 - logdet2
+
+        # log (P) - log (P + Q)
+        term1 = p1 - np.logaddexp(p1, q1)
+        term2 = q2 - np.logaddexp(p2, q2)
+
+        jsd = 1 + (np.mean(term1) + np.mean(term2)) / 2 / np.log(2)
+        
+        
+    else:
+        k = len(mu1)
+        A1 = np.linalg.cholesky(sigma1)
+        A2 = np.linalg.cholesky(sigma2)
+        # Ainv1 = np.linalg.inv(A1)
+        # Ainv2 = np.linalg.inv(A2)
+        Ainv1 = scipy.linalg.solve_triangular(A1, np.eye(k), lower=True)
+        Ainv2 = scipy.linalg.solve_triangular(A2, np.eye(k), lower=True)
+        # generate random samples from each distribution
+        x1 = np.expand_dims(mu1, 1) + A1 @ gen.standard_normal(size=(k, N))
+        x2 = np.expand_dims(mu2, 1) + A2 @ gen.standard_normal(size=(k, N))
+        # compute densities for each
+        # removed factor 2 from these as it cancels
+        logdet1 = np.sum(np.log(np.diag(A1)))
+        logdet2 = np.sum(np.log(np.diag(A2)))
+        delta11 = Ainv1 @ (x1 - np.expand_dims(mu1, 1))
+        p1 = - np.sum(delta11 ** 2, 0) / 2 - logdet1
+        delta21 = Ainv1 @ (x2 - np.expand_dims(mu1, 1))
+        p2 = - np.sum(delta21 ** 2, 0) / 2 - logdet1
+        delta12 = Ainv2 @ (x1 - np.expand_dims(mu2, 1))
+        q1 = - np.sum(delta12 ** 2, 0) / 2 - logdet2
+        delta22 = Ainv2 @ (x2 - np.expand_dims(mu2, 1))
+        q2 = - np.sum(delta22 ** 2, 0) / 2 - logdet2
+
+        # log (P) - log (P + Q)
+        term1 = p1 - np.logaddexp(p1, q1)
+        term2 = q2 - np.logaddexp(p2, q2)
+
+        jsd = 1 + (np.mean(term1) + np.mean(term2)) / 2 / np.log(2)
+        
+    return max(0, jsd) 
+
+def jsd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen_torch):
+    
+    if type(sigma1) != torch.Tensor:
+        sigma1 = torch.tensor(sigma1)
+    if type(sigma2) != torch.Tensor:
+        sigma2 = torch.tensor(sigma2)
+        
+    if mu1 is None and mu2 is None:
+                    
+        k = sigma1.shape[0]
+        A1 = torch.linalg.cholesky(sigma1)
+        A2 = torch.linalg.cholesky(sigma2)
+        logdet1 = torch.sum(torch.log(torch.diag(A1)))
+        logdet2 = torch.sum(torch.log(torch.diag(A2)))
+        # generate random samples from each distribution
+        x10 = torch.randn((k, N), generator=gen_torch)
+        x1 = torch.Tensor(mm(1, A1, x10, lower=1))
+        x20 = torch.randn((k, N), generator=gen_torch)
+        x2 = torch.Tensor(mm(1, A2, x20, lower=1))
+        # compute densities for each
+        p1 = - torch.sum(x10 ** 2, 0) / 2 - logdet1
+        delta21 = torch.linalg.solve_triangular(A1, x2, upper=False)
+        p2 = - torch.sum(delta21 ** 2, 0) / 2 - logdet1
+        delta12 = torch.linalg.solve_triangular(A2, x1, upper=False)
+        q1 = - torch.sum(delta12 ** 2, 0) / 2 - logdet2
+        q2 = - torch.sum(x20 ** 2, 0) / 2 - logdet2
+
+        # log (P) - log (P + Q)
+        term1 = p1 - torch.logaddexp(p1, q1)
+        term2 = q2 - torch.logaddexp(p2, q2)
+
+        jsd = 1 + (torch.mean(term1) + torch.mean(term2)) / 2 / np.log(2)
+        
+        
+    else:
+        
+        k = len(mu1)
+        A1 = torch.linalg.cholesky(sigma1)
+        A2 = torch.linalg.cholesky(sigma2)
+
+        Ainv1 = torch.linalg.solve_triangular(A1, torch.eye(k), upper=False)
+        Ainv2 = torch.linalg.solve_triangular(A2, torch.eye(k), upper=False)
+        # generate random samples from each distribution
+        x1 = torch.Tensor.expand(mu1, 1) + A1 @ gen.standard_normal(size=(k, N))
+        x2 = torch.Tensor.expand(mu2, 1) + A2 @ gen.standard_normal(size=(k, N))
+        # compute densities for each
+        # removed factor 2 from these as it cancels
+        logdet1 = torch.sum(torch.log(torch.diag(A1)))
+        logdet2 = torch.sum(torch.log(torch.diag(A2)))
+        delta11 = Ainv1 @ (x1 - torch.Tensor.expand(mu1, 1))
+        p1 = - torch.sum(delta11 ** 2, 0) / 2 - logdet1
+        delta21 = Ainv1 @ (x2 - torch.Tensor.expand(mu1, 1))
+        p2 = - torch.sum(delta21 ** 2, 0) / 2 - logdet1
+        delta12 = Ainv2 @ (x1 - torch.Tensor.expand(mu2, 1))
+        q1 = - torch.sum(delta12 ** 2, 0) / 2 - logdet2
+        delta22 = Ainv2 @ (x2 - torch.Tensor.expand(mu2, 1))
+        q2 = - torch.sum(delta22 ** 2, 0) / 2 - logdet2
+
+        # log (P) - log (P + Q)
+        term1 = p1 - torch.logaddexp(p1, q1)
+        term2 = q2 - torch.logaddexp(p2, q2)
+
+        jsd = 1 + (torch.mean(term1) + torch.mean(term2)) / 2 / torch.log(2)
+        
+    return max(0, jsd) 
+
+covs = np.load("/home/sezan/Documents/BayesCompare/covs_1000.npy")
+
+alpha = 10/11
+
+dist1 = np.zeros((len(covs), len(covs)))
+dist2 = np.zeros((len(covs), len(covs)))
+
+for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
+    
+    sig1 = trace_norm(ci, eye_w=alpha)
+    
+    for j, cj in tqdm.tqdm(enumerate(covs), total=len(covs), position=1):
+        
+        if j > i:
+            
+            sig2 = trace_norm(cj, eye_w=alpha)
+            
+            dist1[i, j] = jsd(sig1, sig2)
+            dist2[i, j] = jsd_torch_comp(sig1, sig2)
+
+            dist1[j, i] = dist1[i, j]
+            dist2[j, i] = dist2[i, j]
+
+diff_dist = dist1 - np.array(dist2)
+
+if abs(np.max(diff_dist)) < 1e-7:
+    print("Distances are the same!")
+    
+# Results: The maximum difference between JSD and torch compatible JSD is actually 0.0198 which is not so much negligible.
+'''
+
+# Comparing TVD and TVD torch compatable
+
+if torch.cuda.is_available():
+    gen_torch = torch.Generator(device='cuda').manual_seed(42)
+else:
+    gen_torch = torch.Generator(device='cpu').manual_seed(42)
+
+gen = np.random.Generator(np.random.SFC64(42))
+
+def tvd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen):
+
+    if mu1 is not None and mu2 is not None:
+        k = len(mu1)
+        A1 = np.linalg.cholesky(sigma1)
+        A2 = np.linalg.cholesky(sigma2)
+        Ainv1 = scipy.linalg.solve_triangular(A1, np.eye(k), lower=True)
+        Ainv2 = scipy.linalg.solve_triangular(A2, np.eye(k), lower=True)
+        # generate random samples from each distribution
+        x1 = np.expand_dims(mu1, 1) + A1 @ gen.standard_normal(size=(k, N))
+        x2 = np.expand_dims(mu2, 1) + A2 @ gen.standard_normal(size=(k, N))
+        # compute densities for each
+        # removed factor 2 from these as it cancels
+        logdet1 = np.sum(np.log(np.diag(A1)))
+        logdet2 = np.sum(np.log(np.diag(A2)))
+        delta11 = Ainv1 @ (x1 - np.expand_dims(mu1, 1))
+        p1 = - np.sum(delta11 ** 2, 0) / 2 - logdet1
+        delta21 = Ainv1 @ (x2 - np.expand_dims(mu1, 1))
+        p2 = - np.sum(delta21 ** 2, 0) / 2 - logdet1
+        delta12 = Ainv2 @ (x1 - np.expand_dims(mu2, 1))
+        q1 = - np.sum(delta12 ** 2, 0) / 2 - logdet2
+        delta22 = Ainv2 @ (x2 - np.expand_dims(mu2, 1))
+        q2 = - np.sum(delta22 ** 2, 0) / 2 - logdet2
+        f1 = np.maximum(1 - np.exp(q1-p1), 0)
+        f2 = np.maximum(1 - np.exp(p2-q2), 0)
+        tvd = (np.mean(f1) + np.mean(f2)) / 2
+        
+    else:
+        k = sigma1.shape[0]
+        A1 = np.linalg.cholesky(sigma1)
+        A2 = np.linalg.cholesky(sigma2)
+        logdet1 = np.sum(np.log(np.diag(A1)))
+        logdet2 = np.sum(np.log(np.diag(A2)))
+        # generate random samples from each distribution
+        x10 = gen.standard_normal(size=(k, N))
+        x1 = mm(1, A1, x10, lower=1)
+        x20 = gen.standard_normal(size=(k, N))
+        x2 = mm(1, A2, x20, lower=1)
+        # compute densities for each
+        p1 = - np.sum(x10 ** 2, 0) / 2 - logdet1
+        delta21 = scipy.linalg.solve_triangular(A1, x2, lower=True)
+        p2 = - np.sum(delta21 ** 2, 0) / 2 - logdet1
+        delta12 = scipy.linalg.solve_triangular(A2, x1, lower=True)
+        q1 = - np.sum(delta12 ** 2, 0) / 2 - logdet2
+        q2 = - np.sum(x20 ** 2, 0) / 2 - logdet2
+        f1 = np.maximum(1 - np.exp(q1-p1), 0)
+        f2 = np.maximum(1 - np.exp(p2-q2), 0)
+        tvd = (np.mean(f1) + np.mean(f2)) / 2
+    
+    return max(0, tvd)
+
+def tvd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen_torch):
+    
+    if type(sigma1) != torch.Tensor:
+        sigma1 = torch.tensor(sigma1)
+    if type(sigma2) != torch.Tensor:
+        sigma2 = torch.tensor(sigma2)
+
+    if mu1 is not None and mu2 is not None:
+        k = len(mu1)
+        A1 = torch.linalg.cholesky(sigma1)
+        A2 = torch.linalg.cholesky(sigma2)
+        Ainv1 = torch.linalg.solve_triangular(A1, torch.eye(k), upper=False)
+        Ainv2 = torch.linalg.solve_triangular(A2, torch.eye(k), upper=False)
+        # generate random samples from each distribution
+        x1 = torch.Tensor.expand(mu1, 1) + A1 @ torch.randn((k, N), generator=gen)
+        x2 = torch.Tensor.expand(mu2, 1) + A2 @ torch.randn((k, N), generator=gen)
+        # compute densities for each
+        # removed factor 2 from these as it cancels
+        logdet1 = torch.sum(torch.log(torch.diag(A1)))
+        logdet2 = torch.sum(torch.log(torch.diag(A2)))
+        delta11 = Ainv1 @ (x1 - torch.Tensor.expand(mu1, 1))
+        p1 = - torch.sum(delta11 ** 2, 0) / 2 - logdet1
+        delta21 = Ainv1 @ (x2 - torch.Tensor.expand(mu1, 1))
+        p2 = - torch.sum(delta21 ** 2, 0) / 2 - logdet1
+        delta12 = Ainv2 @ (x1 - torch.Tensor.expand(mu2, 1))
+        q1 = - torch.sum(delta12 ** 2, 0) / 2 - logdet2
+        delta22 = Ainv2 @ (x2 - torch.Tensor.expand(mu2, 1))
+        q2 = - torch.sum(delta22 ** 2, 0) / 2 - logdet2
+        f1 = max(1 - torch.exp(q1-p1), 0)
+        f2 = max(1 - torch.exp(p2-q2), 0)
+        tvd = (torch.mean(f1) + torch.mean(f2)) / 2
+        
+    else:
+        k = sigma1.shape[0]
+        A1 = torch.linalg.cholesky(sigma1)
+        A2 = torch.linalg.cholesky(sigma2)
+        logdet1 = torch.sum(torch.log(torch.diag(A1)))
+        logdet2 = torch.sum(torch.log(torch.diag(A2)))
+        # generate random samples from each distribution
+        x10 = torch.randn((k, N), generator=gen)
+        x1 = torch.Tensor(mm(1, A1, x10, lower=1))
+        x20 = torch.randn((k, N), generator=gen)
+        x2 = torch.Tensor(mm(1, A2, x20, lower=1))
+        # compute densities for each
+        p1 = - torch.sum(x10 ** 2, 0) / 2 - logdet1
+        delta21 = torch.linalg.solve_triangular(A1, x2, upper=False)
+        p2 = - torch.sum(delta21 ** 2, 0) / 2 - logdet1
+        delta12 = torch.linalg.solve_triangular(A2, x1, upper=False)
+        q1 = - torch.sum(delta12 ** 2, 0) / 2 - logdet2
+        q2 = - torch.sum(x20 ** 2, 0) / 2 - logdet2
+        f1 = torch.max(1 - torch.exp(q1-p1), torch.zeros_like(q1))
+        f2 = torch.max(1 - torch.exp(p2-q2), torch.zeros_like(p2))
+        tvd = (torch.mean(f1) + torch.mean(f2)) / 2
+    
+    return max(0, tvd)
+
+covs = np.load("/home/sezan/Documents/BayesCompare/covs_1000.npy")
+
+alpha = 10/11
+
+dist1 = np.zeros((len(covs), len(covs)))
+dist2 = np.zeros((len(covs), len(covs)))
+
+for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
+    
+    sig1 = trace_norm(ci, eye_w=alpha)
+    
+    for j, cj in tqdm.tqdm(enumerate(covs), total=len(covs), position=1):
+        
+        if j > i:
+            
+            sig2 = trace_norm(cj, eye_w=alpha)
+            
+            dist1[i, j] = tvd(sig1, sig2)
+            dist2[i, j] = tvd_torch_comp(sig1, sig2)
+
+            dist1[j, i] = dist1[i, j]
+            dist2[j, i] = dist2[i, j]
+
+diff_dist = dist1 - np.array(dist2)
+
+if abs(np.max(diff_dist)) < 1e-7:
+    print("Distances are the same!")
+    
+# Results: The maximum difference between TVD and torch compatible TVD is actually 0.012022903240433647 which is not so much negligible.
