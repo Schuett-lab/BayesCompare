@@ -22,6 +22,17 @@ def trace_norm(sigma, eye_w=0.001):
     
     return A
 
+def trace_norm_N(sigmas, eye_w=0.001):
+    
+    if eye_w == 0:
+        A = sigmas
+    
+    else:
+        A = ((1 - eye_w) * sigmas * sigmas.shape[-1] / sigmas.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)[:, None, None]) + (eye_w * torch.eye(sigmas.shape[-1])[None, ...])
+
+    
+    return A
+    
 '''
 ### Isolating Wasserstein and Testing it
 
@@ -111,7 +122,7 @@ for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
 
 ## Comparing Wasserstein and Torch Compatible Wasserstein
 
-'''
+
 def wasserstein(sigma1, sigma2, mu1=None, mu2=None):
     
     # these conditions do not check for one mean is non zero and other is zero !!!
@@ -164,12 +175,69 @@ def wasserstein_torch_comp(sigma1, sigma2, mu1=None, mu2=None):
     
     return d_sq**0.5
 
+def wasserstein_torch(sigmas, mu1=None, mu2=None):
+    
+    # these conditions do not check for one mean is non zero and other is zero !!!
+    if mu1 is not None and mu2 is not None:
+        means_term = np.linalg.norm(mu1 - mu2, 2)**2
+    else:
+        means_term=0
+    
+    if type(sigmas) != torch.Tensor:
+        sigmas = torch.tensor(sigmas) # N, B=2, D1, D2
+       
+    E_sig, V_sig = torch.linalg.eigh(sigmas[:, 0:1, :, :]) # E_sig = N, B, D1   V_sig = N, B, D1, D2
+    sigs_sqrt = torch.einsum("NBDG, NBG, NBKG -> NBDK", V_sig, torch.sqrt(E_sig), V_sig)
+    
+    sig12 = torch.einsum("NBDK, NBKL, NBLM -> NBDM", sigs_sqrt, sigmas[:, 1:2, :, :], sigs_sqrt)
+    E_sig12, V_sig12 = torch.linalg.eigh(sig12)
+    sig12_sqrt = torch.einsum("NBDG, NBG, NBKG -> NBDK", V_sig12, torch.sqrt(E_sig12), V_sig12)
+    
+    tr_term = sigmas[:, 0:1, :, :] + sigmas[:, 1:2, :, :] - 2*sig12_sqrt
+    d_sq = means_term + tr_term.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
+    d_sq = d_sq[:,0]
+    # if d_sq<0 and d_sq>-1e-7:
+    #     d_sq = 0
+    
+    # elif d_sq < -1e-7:
+    #     raise ValueError(f"Wasserstein distance cannot be negative. Value is: {d_sq}")
+    
+    return d_sq**0.5
+
 covs = np.load("/home/sezan/Documents/BayesCompare/covs_1000.npy")
 
 alpha = 10/11
 
 dist1 = np.zeros((len(covs), len(covs)))
 dist2 = np.zeros((len(covs), len(covs)))
+dist3 = np.zeros((len(covs), len(covs)))
+dist4 = np.zeros((len(covs), len(covs)))
+
+N =len(covs)
+N_total = int((N*(N-1))/2)
+
+upper_pairs = [(i, j) for j in range(N) for i in range(j + 1, N)]
+
+covs_subset = []
+
+normed_covs = trace_norm_N(torch.Tensor(covs), eye_w=alpha)
+
+# for i in range(25):
+#     covs_subset.append([covs[upper_pairs[i]]])
+    
+# covs_subset = torch.Tensor(covs_subset)
+for i in range(N_total):
+    tens1 = torch.Tensor(normed_covs[upper_pairs[i][0]:upper_pairs[i][0]+1, :, :])
+    tens2 = torch.Tensor(normed_covs[upper_pairs[i][1]:upper_pairs[i][1]+1, :, :])
+    covs_subset.append(torch.concat((tens1, tens2), dim=0)[None, ...])
+    
+covs_subset = torch.concat(covs_subset, dim=0)
+    
+torch_out = wasserstein_torch(covs_subset)
+
+for i in range(N_total):
+    dist4[upper_pairs[i][0],upper_pairs[i][1]]=torch_out[i]
+    dist4[upper_pairs[i][1],upper_pairs[i][0]]=dist4[upper_pairs[i][0],upper_pairs[i][1]]
 
 for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
     
@@ -183,9 +251,11 @@ for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
             
             dist1[i, j] = wasserstein(sig1, sig2)
             dist2[i, j] = wasserstein_torch_comp(sig1, sig2)
+            dist3[i, j] = wasserstein_torch(np.concat((sig1[None, None, :, :], sig2[None, None, :, :]), axis=1))
 
             dist1[j, i] = dist1[i, j]
             dist2[j, i] = dist2[i, j]
+            dist3[j, i] = dist3[i, j]
 
 diff_dist = dist1 - np.array(dist2)
 
@@ -193,7 +263,6 @@ if abs(np.max(diff_dist)) < 1e-7:
     print("Distances are the same!")
 
 # Result: Indeed the two wasserstein computation return the same result.
-'''
 
 # Comparing JSD and JSD torch compatable
 '''
@@ -358,12 +427,12 @@ diff_dist = dist1 - np.array(dist2)
 
 if abs(np.max(diff_dist)) < 1e-7:
     print("Distances are the same!")
-    
+'''    
 # Results: The maximum difference between JSD and torch compatible JSD is actually 0.0198 which is not so much negligible.
-'''
+
 
 # Comparing TVD and TVD torch compatable
-
+'''
 if torch.cuda.is_available():
     gen_torch = torch.Generator(device='cuda').manual_seed(42)
 else:
@@ -505,5 +574,5 @@ diff_dist = dist1 - np.array(dist2)
 
 if abs(np.max(diff_dist)) < 1e-7:
     print("Distances are the same!")
-    
+    '''
 # Results: The maximum difference between TVD and torch compatible TVD is actually 0.012022903240433647 which is not so much negligible.
