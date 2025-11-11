@@ -8,6 +8,7 @@ import os
 import torch
 from functools import partial
 from itertools import repeat
+import tqdm 
 
 ## Metrics
 
@@ -313,7 +314,9 @@ def dist_workers_starmap_async(indices, covs, measure, queue):
     queue.put((int(indices[0]), int(indices[1]), res))
 
 
-def writer(file_dir, que):
+def writer(file_dir, que, total_num_ops):
+    
+    progress_bar = tqdm.tqdm(total=int(total_num_ops))
     
     with h5py.File(file_dir, 'r+') as f:
         
@@ -330,6 +333,8 @@ def writer(file_dir, que):
             res_dset[item[1], item[0]] = item[2]
             
             f.flush()
+            
+            progress_bar.update(1)
 
 def check_saved_hdf(hdf_dir, N, dtype):
     
@@ -381,6 +386,8 @@ def meas_dist_map_async_global(covs, mean=None, meas_name='TVD', alpha=None, b=1
     output_file_dir='/home/sezan/Documents/BayesCompare/parallel_tests_global_densesampled.hdf5'
 
     indices = check_saved_hdf(output_file_dir, N, dtype_covs)
+    
+    nof_operations = len(indices)
 
     # Global consts
     
@@ -394,7 +401,7 @@ def meas_dist_map_async_global(covs, mean=None, meas_name='TVD', alpha=None, b=1
         manager = mp.Manager()
         queues = manager.Queue()
         
-        writer_procc = mp.Process(target=writer, args=(output_file_dir, queues), daemon=True)
+        writer_procc = mp.Process(target=writer, args=(output_file_dir, queues, nof_operations), daemon=True)
         writer_procc.start()
         
         start = time.time()
@@ -430,6 +437,8 @@ def meas_dist_map_async_global_queue(covs, mean=None, meas_name='TVD', alpha=Non
 
     indices = check_saved_hdf(output_file_dir, N, dtype_covs)
     
+    nof_operations = len(indices)
+    
     cov_pairs = [(covs[i], covs[j]) for (i, j) in indices]
 
     # Global consts - queue
@@ -449,7 +458,7 @@ def meas_dist_map_async_global_queue(covs, mean=None, meas_name='TVD', alpha=Non
         manager = mp.Manager()
         queues = manager.Queue()
         
-        writer_procc = mp.Process(target=writer, args=(output_file_dir, queues), daemon=True)
+        writer_procc = mp.Process(target=writer, args=(output_file_dir, queues, nof_operations), daemon=True)
         writer_procc.start()
         
         start = time.time()
@@ -482,6 +491,8 @@ def meas_dist_map_async_partial(covs, mean=None, meas_name='TVD', alpha=None, b=
     
     indices = check_saved_hdf(output_file_dir, N, dtype_covs)
     
+    nof_operations = len(indices)
+    
     cov_pairs = [(covs[i], covs[j]) for (i, j) in indices]
     
     meas = select_measure(meas_name)
@@ -501,7 +512,7 @@ def meas_dist_map_async_partial(covs, mean=None, meas_name='TVD', alpha=None, b=
         
         partial_dist_workers_map_async = partial(dist_workers_map_async_partial, measure=meas, queue=queues)
         
-        writer_procc = mp.Process(target=writer, args=(output_file_dir, queues), daemon=True)
+        writer_procc = mp.Process(target=writer, args=(output_file_dir, queues, nof_operations), daemon=True)
         writer_procc.start()
         
         start = time.time()
@@ -534,6 +545,8 @@ def meas_dist_starmap_async(covs, mean=None, meas_name='TVD', alpha=None, b=1/10
     
     indices = check_saved_hdf(output_file_dir, N, dtype_covs)
     
+    nof_operations = len(indices)
+    
     #cov_pairs = [(covs[i], covs[j]) for (i, j) in indices]
     
     meas = select_measure(meas_name)
@@ -549,7 +562,7 @@ def meas_dist_starmap_async(covs, mean=None, meas_name='TVD', alpha=None, b=1/10
         manager = mp.Manager()
         queues = manager.Queue()
         
-        writer_procc = mp.Process(target=writer, args=(output_file_dir, queues), daemon=True)
+        writer_procc = mp.Process(target=writer, args=(output_file_dir, queues, nof_operations), daemon=True)
         writer_procc.start()
         
         task_list = zip(indices, repeat(covs), repeat(meas), repeat(queues))
@@ -577,9 +590,9 @@ if __name__ == "__main__":
     input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_resnet50_densesampled_normalized.npy'
     
     covs = np.load(input_dir)
-    #meas_dist_map_async_global(covs, input_dir, meas_name='wasserstein')
+    meas_dist_map_async_global(covs, input_dir, meas_name='wasserstein')
     #meas_dist_map_async_global_queue(covs, input_dir, meas_name='wasserstein')
-    meas_dist_map_async_partial(covs, input_dir, meas_name='wasserstein')
+    #meas_dist_map_async_partial(covs, input_dir, meas_name='wasserstein')
     #meas_dist_starmap_async(covs, input_dir, meas_name='wasserstein')
 
 # Total duration is: 290.78909182548523 for 300 operations - map_async + global pass
