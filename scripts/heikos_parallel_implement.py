@@ -10,8 +10,11 @@ import os
 import torch
 from functools import partial
 from itertools import repeat
+import tqdm
 
-def writer(que, file_dir):
+def writer(que, file_dir, total_num_ops):
+    
+    progress_bar = tqdm.tqdm(total=int(total_num_ops))
     
     with h5py.File(file_dir, 'r+') as f:
         
@@ -28,6 +31,8 @@ def writer(que, file_dir):
             res_dset[item[0][1], item[0][0]] = item[1]
             
             f.flush()
+            
+            progress_bar.update(1)
 
 ## corresponds to computation
 def wasserstein(sigma1, sigma2, mu1=None, mu2=None):
@@ -118,12 +123,14 @@ def starter(input_queue, covs, indices, meas_name):
 
 if __name__ == "__main__":
     
-    input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_normalized.npy'
-    output_file_dir = '/home/sezan/Documents/BayesCompare/parallel_tests_heikos_new.hdf5'
+    input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_resnet50_densesampled_normalized.npy'
+    output_file_dir = '/home/sezan/Documents/BayesCompare/parallel_tests_heikos_bigone.hdf5'
     covs = np.load(input_dir)
     meas_name = 'wasserstein'
     
     N=len(covs)
+    
+    num_processes= int((N*(N-1))/2)
     
     if isinstance(covs[0], np.ndarray):
         dtype_covs = 'numpy'
@@ -142,7 +149,7 @@ if __name__ == "__main__":
     p_starter.start()
     workers = []
     
-    start = time.time()
+    #start = time.time()
     
     for _ in range(num_workers):
         
@@ -151,7 +158,7 @@ if __name__ == "__main__":
         
         workers.append(p)
     
-    p_writer = Process(target=writer, args=(output_queue, output_file_dir))
+    p_writer = Process(target=writer, args=(output_queue, output_file_dir, num_processes))
     
     p_writer.start()
     p_starter.join()
@@ -163,13 +170,12 @@ if __name__ == "__main__":
         
         p.join()
         
-    end = time.time()
+    #end = time.time()
         
     output_queue.put((None)) # Send sentinel to writer
     p_writer.join()
     
     
-    print(f"Total duration is: {end-start} for {len(indices)} operations - Heiko's approach")
+    #print(f"Total duration is: {end-start} for {len(indices)} operations - Heiko's approach")
     
-    # Total duration is: 284.66685009002686 for 300 operations - Heiko's approach -- End time is at line 159
-    # Total duration is: 301.4578273296356 for 300 operations - Heiko's approach -- End time is at line 169
+    # Total duration is: 301.1273567676544 for 300 operations - Heiko's approach
