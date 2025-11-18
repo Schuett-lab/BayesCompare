@@ -23,7 +23,7 @@ def get_cov(activations):
     """
     if torch.is_tensor(activations):
         #x = activations.detach().clone() # we dont want the covs to be detached from the graph because we would like to use them for training
-        x = torch.reshape(x, [x.shape[0], -1])
+        x = torch.reshape(activations, [activations.shape[0], -1])
         x -= torch.mean(x, 1, keepdim=True)
         return torch.matmul(x, x.T)
     else:

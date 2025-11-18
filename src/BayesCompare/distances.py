@@ -6,6 +6,7 @@ import os
 import glob
 from joblib import Parallel, delayed, Memory
 import torch
+import multiprocessing as mp
 
 ## Metrics
 
@@ -34,7 +35,7 @@ def wasserstein_torch_comp(sigma1, sigma2, mu1=None, mu2=None):
     
     # these conditions do not check for one mean is non zero and other is zero !!!
     if mu1 is not None and mu2 is not None:
-        means_term = np.linalg.norm(mu1 - mu2, 2)**2
+        means_term = torch.linalg.norm(mu1 - mu2, 2)**2
     else:
         means_term=0
     
@@ -361,6 +362,8 @@ def bhattacharyya(sigma1, sigma2, mu1=None, mu2=None):
 
 ## Distance function caller
 
+## the original initial version
+
 def measure_dist(covs, checkpoint_dir, mean=None, meas_name='TVD', alpha=None, b=1/100): # maybe set default alpha based on N (as in paper)
     
     # check if a single string or a list of strings is given in the meas_name
@@ -464,6 +467,8 @@ def measure_dist(covs, checkpoint_dir, mean=None, meas_name='TVD', alpha=None, b
         return dist_dict            
 
 
+## joblib parallel with checkpoints
+
 def parallel_measure_dist(covs, checkpoint_dir, mean=None, meas_name='TVD', alpha=None, b=1/100, n_jobs=-1): # what should be n-jobs default?
     
     memory = Memory(location=checkpoint_dir, verbose=0)
@@ -533,8 +538,8 @@ def parallel_measure_dist(covs, checkpoint_dir, mean=None, meas_name='TVD', alph
     else:    
         return dist_dict 
 
+## no check points, no parallelization, single measure only and torch compatable (after correcting select measure for torch comp measures too)
 def measure_dist_ver1(covs, mean=None, meas_name='TVD', alpha=None, b=1/100):
-    # no check points, no parallelization, single measure only and torch compatable
     
     N=len(covs)
     

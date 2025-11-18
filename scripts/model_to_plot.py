@@ -265,7 +265,7 @@ plt.savefig("figures/resnet50_results/avg_dist_wasserstein_corrected_corrected_a
 '''
 
 ###------------------------------- For Wasserstein and JSD and for all layers of all ResNets
-'''
+
 # Load a checkpoint model
 snapshot1 = torch.load("/home/sezan/Documents/BayesCompare/checkpoints/snapshot_ep99_seed128_iter7.pth")
 snapshot2 = torch.load("/home/sezan/Documents/BayesCompare/checkpoints/snapshot_ep99_seed333_iter8.pth")
@@ -325,7 +325,7 @@ with torch.inference_mode():
 
 with open('covs_1000_all_resnets_all_layers.pkl', "wb") as f:
     pickle.dump(covs, f)
-'''
+
 
 ## Directly from saved covariance matrix
 '''
@@ -1389,7 +1389,7 @@ for dist_name in dist_names:
         plt.savefig("figures/resnet50_results/all_layers/"+layer_labels[i]+"_avg_dist_"+dist_name+"_per_layer_type_retrieval.svg", dpi=400)'''
         
 ## Relu_2 vs Add
-
+'''
 dist_names = ['wasserstein', 'JSD']
 
 model5 = torchvision.models.get_model("resnet50", weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
@@ -1447,3 +1447,89 @@ for dist_name in dist_names:
     #plt.show()
     plt.savefig("figures/resnet50_results/all_layers/relu_vs_add_dist_"+dist_name+".svg", dpi=400)
     #plt.savefig("figures/resnet50_results/all_layers/relu_vs_add_dist_"+dist_name+"_without_5thmodel.svg", dpi=400)
+'''
+
+## Kornblith plots layer specific
+'''
+dist_names = ['wasserstein', 'JSD']
+
+model5 = torchvision.models.get_model("resnet50", weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
+model_layers, _ = get_graph_node_names(model5)
+
+colorbar_max_vals = [8, 1]
+
+for d, dist_name in enumerate(dist_names):
+    
+    dist = np.load("dist_"+dist_name+"_1000_all_resnets_all_layers.npy")
+    
+    n = int(len(dist)/5) # number of layers per model
+    m = 5 # number of models
+    
+    blocks = dist.reshape((m, n, m, n)).transpose(0,2,1,3).reshape(m*m,n,n)
+    all_idx = np.triu(np.arange(m*m).reshape(m,m),k=1)
+    idx = all_idx[np.where(all_idx!=0)]
+    
+    conv_idx = []
+    bn_idx = []
+    relu_idx = []
+    downsample_idx = []
+    maxpool_idx = []
+    avgpool_idx = []
+    fc_idx = []
+
+    for i, layer_name in enumerate(model_layers):
+        if 'conv' in layer_name:
+            conv_idx.append(i)
+        elif 'bn' in layer_name:
+            bn_idx.append(i)
+        elif 'relu' in layer_name:
+            relu_idx.append(i)
+        elif 'downsample' in layer_name:
+            downsample_idx.append(i)
+        elif 'avgpool' in layer_name:
+            avgpool_idx.append(i)
+        elif 'fc' in layer_name:
+            fc_idx.append(i)
+
+    layers = [conv_idx, bn_idx, relu_idx]
+    
+    layer_labels = ['conv', 'bn', 'relu']
+    
+    stack_blocks = []
+        
+    for i in idx:
+        stack_blocks.append(blocks[i])
+    
+    np_stack_blocks=np.array(stack_blocks)
+    avg_stack_blocks = np.mean(np_stack_blocks, axis=0)
+    
+    for i, layer in enumerate(layers):
+        
+        layer_specific_stack = []
+        
+        for p in stack_blocks:
+            
+            mtx_per_block = np.zeros((len(layer), len(layer)))
+            
+            idx_1 = 0            
+            for k in layer:
+                idx_2 = 0
+                for l in layer:
+                    mtx_per_block[idx_1, idx_2] = p[k,l]
+                    mtx_per_block[idx_2, idx_1] = p[k,l]
+                    idx_2 += 1
+                idx_1 += 1
+                
+            layer_specific_stack.append(mtx_per_block)
+                
+        np_layer_specific_stack=np.array(layer_specific_stack)
+        avg_layer_specific = np.mean(np_layer_specific_stack, axis=0)
+        
+        plt.figure()
+        plt.imshow(avg_layer_specific, "bone", vmin=0, vmax=np.max(colorbar_max_vals[d]))
+        plt.colorbar()
+        plt.title(layer_labels[i]+" Layers "+ dist_name.capitalize()+" Distance")
+        ax = plt.gca()
+        ax.set_axis_off()
+        plt.savefig("figures/resnet50_results/all_layers/"+layer_labels[i]+"_blocks_dist_"+dist_name+"_allresnets_alllayers.svg", dpi=800)
+'''       
