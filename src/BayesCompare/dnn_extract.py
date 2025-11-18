@@ -6,9 +6,13 @@ from copy import deepcopy
 from typing import Any, Dict, List, Optional, Union
 
 import torch
-from torchvision.models.feature_extraction import NodePathTracer, DualGraphModule, _warn_graph_differences, _set_default_tracer_kwargs
+from torchvision.models.feature_extraction import (
+    NodePathTracer,
+    DualGraphModule,
+    _warn_graph_differences,
+    _set_default_tracer_kwargs,
+)
 from torch import fx, nn
-
 
 
 def get_cov(activations):
@@ -22,7 +26,7 @@ def get_cov(activations):
     dimension.
     """
     if torch.is_tensor(activations):
-        #x = activations.detach().clone() # we dont want the covs to be detached from the graph because we would like to use them for training
+        # x = activations.detach().clone() # we dont want the covs to be detached from the graph because we would like to use them for training
         x = torch.reshape(activations, [activations.shape[0], -1])
         x -= torch.mean(x, 1, keepdim=True)
         return torch.matmul(x, x.T)
@@ -39,12 +43,12 @@ def cov_extractor(
     eval_return_nodes: Optional[Union[List[str], Dict[str, str]]] = None,
     tracer_kwargs: Optional[Dict[str, Any]] = None,
     suppress_diff_warning: bool = False,
-    concrete_args: Optional[Dict[str, Any]] = None
+    concrete_args: Optional[Dict[str, Any]] = None,
 ) -> torch.fx.GraphModule:
     """
     Creates a minimal torch graph module that returns covariance matrices for the specified layers.
     This function is a modified version of the torchvision.models.feature_extraction.create_feature_extractor
-    function, with the addition of covariance computation after the specified layers. It is used in the same 
+    function, with the addition of covariance computation after the specified layers. It is used in the same
     way as create_feature_extractor except for this function returns covariance matrices rather than activations.
     For the documentation of create_feature_extractor, see: https://docs.pytorch.org/vision/stable/feature_extraction.html
     """
@@ -52,7 +56,9 @@ def cov_extractor(
     tracer_kwargs = _set_default_tracer_kwargs(tracer_kwargs)
     is_training = model.training
 
-    if all(arg is None for arg in [return_nodes, train_return_nodes, eval_return_nodes]):
+    if all(
+        arg is None for arg in [return_nodes, train_return_nodes, eval_return_nodes]
+    ):
 
         raise ValueError(
             "Either `return_nodes` or `train_return_nodes` and `eval_return_nodes` together, should be specified"
@@ -64,7 +70,9 @@ def cov_extractor(
         )
 
     if not ((return_nodes is None) ^ (train_return_nodes is None)):
-        raise ValueError("If `train_return_nodes` and `eval_return_nodes` are specified, then both should be specified")
+        raise ValueError(
+            "If `train_return_nodes` and `eval_return_nodes` are specified, then both should be specified"
+        )
 
     # Put *_return_nodes into Dict[str, str] format
     def to_strdict(n) -> Dict[str, str]:
@@ -83,7 +91,10 @@ def cov_extractor(
     # Repeat the tracing and graph rewriting for train and eval mode
     tracers = {}
     graphs = {}
-    mode_return_nodes: Dict[str, Dict[str, str]] = {"train": train_return_nodes, "eval": eval_return_nodes}
+    mode_return_nodes: Dict[str, Dict[str, str]] = {
+        "train": train_return_nodes,
+        "eval": eval_return_nodes,
+    }
     for mode in ["train", "eval"]:
         if mode == "train":
             model.train()
@@ -93,16 +104,18 @@ def cov_extractor(
         # Instantiate our NodePathTracer and use that to trace the model
         tracer = NodePathTracer(**tracer_kwargs)
         graph = tracer.trace(model, concrete_args=concrete_args)
-        
-        name = model.__class__.__name__ if isinstance(model, nn.Module) else model.__name__
+
+        name = (
+            model.__class__.__name__ if isinstance(model, nn.Module) else model.__name__
+        )
         graph_module = fx.GraphModule(tracer.root, graph, name)
-        
-        
-        #---- my insertion
+
+        # ---- my insertion
         def _wrap_with_cov(graph_module: fx.GraphModule, tnode: fx.Node) -> fx.Node:
             with graph_module.graph.inserting_after(tnode):
                 return graph_module.graph.call_function(get_cov, args=(tnode,))
-        #---- end of my insertion
+
+        # ---- end of my insertion
 
         available_nodes = list(tracer.node_to_qualname.values())
         # FIXME We don't know if we should expect this to happen
@@ -114,7 +127,9 @@ def cov_extractor(
         for query in mode_return_nodes[mode].keys():
             # To check if a query is available we need to check that at least
             # one of the available names starts with it up to a .
-            if not any([re.match(rf"^{query}(\.|$)", n) is not None for n in available_nodes]):
+            if not any(
+                [re.match(rf"^{query}(\.|$)", n) is not None for n in available_nodes]
+            ):
                 raise ValueError(
                     f"node: '{query}' is not present in model. Hint: use "
                     "`get_graph_node_names` to make sure the "
@@ -137,10 +152,10 @@ def cov_extractor(
         # Find nodes corresponding to return_nodes and make them into output_nodes
         nodes = [n for n in graph_module.graph.nodes]
         output_nodes = OrderedDict()
-        
+
         # iterate over a snapshot of keys since we pop inside the loop
         pending_queries = list(mode_return_nodes[mode].keys())
-        
+
         for n in reversed(nodes):
             module_qualname = tracer.node_to_qualname.get(n)
             if module_qualname is None:
@@ -148,28 +163,28 @@ def cov_extractor(
             for query in pending_queries:
                 depth = query.count(".")
                 if ".".join(module_qualname.split(".")[: depth + 1]) == query:
-                    
+
                     # Insert cov node after the activation node and collect it
                     cov_node = _wrap_with_cov(graph_module, n)
                     output_nodes[mode_return_nodes[mode][query]] = cov_node
-                    
+
                     # remove from both our snapshot and the dict
                     pending_queries.remove(query)
                     mode_return_nodes[mode].pop(query)
-                    
+
                     break
-        
+
         # Keep ordering stable
         output_nodes = OrderedDict(reversed(list(output_nodes.items())))
-        
+
         # Refresh the graph tail after all cov nodes were inserted,
         # then append the output node at the real end of the graph
         graph_module.graph.lint()
-        
+
         nodes_after = [n for n in graph_module.graph.nodes]
         with graph_module.graph.inserting_after(nodes_after[-1]):
             graph_module.graph.output(output_nodes)
-        
+
         graph_module.graph.lint()
         graph_module.graph.eliminate_dead_code()
         graph_module.recompile()
@@ -184,7 +199,9 @@ def cov_extractor(
         _warn_graph_differences(tracers["train"], tracers["eval"])
 
     # Build the final graph module
-    graph_module = DualGraphModule(model, graphs["train"], graphs["eval"], class_name=name)
+    graph_module = DualGraphModule(
+        model, graphs["train"], graphs["eval"], class_name=name
+    )
 
     # Restore original training mode
     model.train(is_training)

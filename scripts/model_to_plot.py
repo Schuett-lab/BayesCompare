@@ -15,7 +15,7 @@ from torchvision.models.feature_extraction import get_graph_node_names
 import pickle
 
 ###------------------------------- For only Wasserstein and a subset of layers of 5 ResNets.
-'''
+"""
 ## Compute the covariances from trained models:
 
 # Load a checkpoint model
@@ -117,11 +117,11 @@ with torch.inference_mode():
             covs = covs_extractor(x_input)
 
 np.save("covs_1000_all_resnets_densesampled.npy", np.stack(covs))
-'''
+"""
 
 ## Directly from saved covariance matrix
 
-'''
+"""
 covs = np.load("/home/sezan/Documents/BayesCompare/covs_1000_all_resnets_densesampled.npy")
 
 dist = BayesCompare.measure_dist(covs, checkpoint_dir="/home/sezan/Documents/BayesCompare/my_dist_checkpoints/", meas_name=['wasserstein'], alpha=10/11)
@@ -130,10 +130,10 @@ dist = dist['wasserstein']
 
 np.save("dist_wasserstein_corrected_1000_all_resnets_densesampled.npy", dist)
 
-'''
+"""
 ## Directly from saved distance matrix
 
-'''
+"""
 dist = np.load("nonan_symm_dist_wasserstein_corrected_1000_all_resnets_densesampled.npy")
 
 plt.figure()
@@ -262,10 +262,10 @@ plt.xlabel("Layer")
 plt.ylabel("Wasserstein Distance")
 plt.tight_layout()
 plt.savefig("figures/resnet50_results/avg_dist_wasserstein_corrected_corrected_allresnets_densesampled_retrieval.svg", dpi=400)
-'''
+"""
 
 ###------------------------------- For Wasserstein and JSD and for all layers of all ResNets
-
+"""
 # Load a checkpoint model
 snapshot1 = torch.load("/home/sezan/Documents/BayesCompare/checkpoints/snapshot_ep99_seed128_iter7.pth")
 snapshot2 = torch.load("/home/sezan/Documents/BayesCompare/checkpoints/snapshot_ep99_seed333_iter8.pth")
@@ -326,9 +326,9 @@ with torch.inference_mode():
 with open('covs_1000_all_resnets_all_layers.pkl', "wb") as f:
     pickle.dump(covs, f)
 
-
+"""
 ## Directly from saved covariance matrix
-'''
+"""
 with open('covs_1000_all_resnets_all_layers.pkl', "rb") as f:
     covs_names = pickle.load(f)
 
@@ -347,9 +347,9 @@ dist = BayesCompare.measure_dist(covs, checkpoint_dir="/home/sezan/Documents/Bay
 np.save("dist_wasserstein_1000_all_resnets_all_layers.npy", dist['wasserstein'])
 
 np.save("dist_JSD_1000_all_resnets_all_layers.npy", dist['JSD'])
-'''
+"""
 ## Directly from saved distances
-'''
+"""
 means = []
 stds = []
 
@@ -486,9 +486,9 @@ for dist_name in dist_names:
     plt.ylabel(dist_name.capitalize()+" Distance")
     plt.tight_layout()
     plt.savefig("figures/resnet50_results/all_layers/avg_dist_"+dist_name+"_allresnets_alllayers_retrieval.svg", dpi=400)
-'''
+"""
 # compare the averages
-'''
+"""
 plt.figure(figsize=(14, 6), dpi=400)
 
 for j, (mean_arr, std_arr) in enumerate(zip(means, stds)):
@@ -506,9 +506,9 @@ plt.ylabel("Distance")
 plt.legend()
 plt.tight_layout()
 plt.savefig("figures/resnet50_results/all_layers/avg_dist_comparison_allresnets_alllayers_retrieval.svg", dpi=400)
-'''
+"""
 ## conv vs bn vs relu
-'''
+"""
 import seaborn as sns
 import pandas as pd
 
@@ -608,10 +608,10 @@ for ax, meas, palette in zip(
  
 plt.tight_layout()
 plt.savefig("figures/resnet50_results/all_layers/wasserstein_jsd_conv_bn_relu_corrected_comparison.svg", dpi=400)
-'''
+"""
 
 # conv vs bn vs relu vs downsample vs avgpool vs fc
-'''
+"""
 import seaborn as sns
 import pandas as pd
 
@@ -728,10 +728,10 @@ for ax, meas, palette in zip(
  
 plt.tight_layout()
 plt.savefig("figures/resnet50_results/all_layers/wasserstein_jsd_allayers_comparison.svg", dpi=400)
-'''
+"""
 # Super detailed layers comparison
 
-'''import seaborn as sns
+"""import seaborn as sns
 import pandas as pd
 
 stacks_wass = np.load('stacked_diagswasserstein.npy')
@@ -929,11 +929,11 @@ for ax, meas, palette, id in zip(
             ha="center", va="top", fontsize=12)
  
 plt.tight_layout()
-plt.savefig("figures/resnet50_results/all_layers/wasserstein_jsd_allayers_comparison_detailed.svg", dpi=400)'''
+plt.savefig("figures/resnet50_results/all_layers/wasserstein_jsd_allayers_comparison_detailed.svg", dpi=400)"""
 
-### 
+###
 
-'''import matplotlib.pyplot as plt
+"""import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, LinearSegmentedColormap, to_rgb
 from matplotlib.patches import Patch
 
@@ -1087,11 +1087,11 @@ cbar = plt.colorbar(sc)
 cbar.set_label('Layer Depth')
 plt.tight_layout()
 #plt.show()
-plt.savefig("figures/resnet50_results/all_layers/jsd_vs_wass_layer_depth.svg", dpi=400)'''
+plt.savefig("figures/resnet50_results/all_layers/jsd_vs_wass_layer_depth.svg", dpi=400)"""
 
 
 ## Layer Name Color Coded
-'''stack_diags_wass = np.load('stacked_diagswasserstein.npy')
+"""stack_diags_wass = np.load('stacked_diagswasserstein.npy')
 stack_diags_jsd = np.load('stacked_diagsJSD.npy')
 
 model5 = torchvision.models.get_model("resnet50", weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
@@ -1146,12 +1146,12 @@ plt.legend(title='Model Pairs', frameon=True, loc='best')
 plt.tight_layout()
 #plt.show()
 plt.savefig("figures/resnet50_results/all_layers/jsd_vs_wass_layer_name.svg", dpi=400)
-'''
+"""
 
 
- ## Avergae/ranked block matrix plot
- 
-'''from scipy.stats import rankdata
+## Avergae/ranked block matrix plot
+
+"""from scipy.stats import rankdata
 
 dist_names = ['wasserstein', 'JSD']
 
@@ -1201,11 +1201,11 @@ for dist_name in dist_names:
     plt.title(dist_name.capitalize()+" Distance")
     ax = plt.gca()
     ax.set_axis_off()
-    plt.savefig("figures/resnet50_results/all_layers/ranked_blocks_dist_"+dist_name+"_allresnets_alllayers.svg", dpi=800)'''
+    plt.savefig("figures/resnet50_results/all_layers/ranked_blocks_dist_"+dist_name+"_allresnets_alllayers.svg", dpi=800)"""
 
 ## Block and layer specific retrieval plot
 
-'''dist_names = ['wasserstein', 'JSD']
+"""dist_names = ['wasserstein', 'JSD']
 
 model5 = torchvision.models.get_model("resnet50", weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
 model_layers, _ = get_graph_node_names(model5)
@@ -1297,12 +1297,12 @@ for dist_name in dist_names:
     plt.grid(axis='x', color='gray', alpha=0.1, linewidth=0.5)
     #plt.show()
     #plt.savefig("figures/resnet50_results/all_layers/avg_dist_"+dist_name+"_per_layer_type_retrieval_without5th.svg", dpi=400)
-    plt.savefig("figures/resnet50_results/all_layers/avg_dist_"+dist_name+"_per_layer_type_retrieval.svg", dpi=400)'''
-        
+    plt.savefig("figures/resnet50_results/all_layers/avg_dist_"+dist_name+"_per_layer_type_retrieval.svg", dpi=400)"""
+
 
 ## Relu-2 & downsample specific retrieval plot
 
-'''dist_names = ['wasserstein', 'JSD']
+"""dist_names = ['wasserstein', 'JSD']
 
 model5 = torchvision.models.get_model("resnet50", weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
 model_layers, _ = get_graph_node_names(model5)
@@ -1386,10 +1386,10 @@ for dist_name in dist_names:
         plt.tight_layout()
         plt.grid(axis='x', color='gray', alpha=0.1, linewidth=0.5)
         #plt.show()
-        plt.savefig("figures/resnet50_results/all_layers/"+layer_labels[i]+"_avg_dist_"+dist_name+"_per_layer_type_retrieval.svg", dpi=400)'''
-        
+        plt.savefig("figures/resnet50_results/all_layers/"+layer_labels[i]+"_avg_dist_"+dist_name+"_per_layer_type_retrieval.svg", dpi=400)"""
+
 ## Relu_2 vs Add
-'''
+"""
 dist_names = ['wasserstein', 'JSD']
 
 model5 = torchvision.models.get_model("resnet50", weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
@@ -1447,10 +1447,10 @@ for dist_name in dist_names:
     #plt.show()
     plt.savefig("figures/resnet50_results/all_layers/relu_vs_add_dist_"+dist_name+".svg", dpi=400)
     #plt.savefig("figures/resnet50_results/all_layers/relu_vs_add_dist_"+dist_name+"_without_5thmodel.svg", dpi=400)
-'''
+"""
 
 ## Kornblith plots layer specific
-'''
+"""
 dist_names = ['wasserstein', 'JSD']
 
 model5 = torchvision.models.get_model("resnet50", weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
@@ -1532,4 +1532,4 @@ for d, dist_name in enumerate(dist_names):
         ax = plt.gca()
         ax.set_axis_off()
         plt.savefig("figures/resnet50_results/all_layers/"+layer_labels[i]+"_blocks_dist_"+dist_name+"_allresnets_alllayers.svg", dpi=800)
-'''       
+"""

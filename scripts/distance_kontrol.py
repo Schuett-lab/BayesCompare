@@ -5,35 +5,45 @@ import tqdm
 import time
 import torch
 
+
 def sqrt_w_svd(A):
-    
-    lamb, u = np.linalg.eig(A) 
-    sqroot = u @ np.eye(lamb.size)*np.sqrt(lamb) @ np.transpose(u)  
-    
+
+    lamb, u = np.linalg.eig(A)
+    sqroot = u @ np.eye(lamb.size) * np.sqrt(lamb) @ np.transpose(u)
+
     return sqroot
 
+
 def trace_norm(sigma, eye_w=0.001):
-    
+
     if eye_w == 0:
         A = sigma
-    
+
     else:
-        A = ((1 - eye_w) * sigma * sigma.shape[0] / np.trace(sigma)) + (eye_w * np.eye(sigma.shape[0]))
-    
+        A = ((1 - eye_w) * sigma * sigma.shape[0] / np.trace(sigma)) + (
+            eye_w * np.eye(sigma.shape[0])
+        )
+
     return A
+
 
 def trace_norm_N(sigmas, eye_w=0.001):
-    
+
     if eye_w == 0:
         A = sigmas
-    
-    else:
-        A = ((1 - eye_w) * sigmas * sigmas.shape[-1] / sigmas.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)[:, None, None]) + (eye_w * torch.eye(sigmas.shape[-1])[None, ...])
 
-    
+    else:
+        A = (
+            (1 - eye_w)
+            * sigmas
+            * sigmas.shape[-1]
+            / sigmas.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)[:, None, None]
+        ) + (eye_w * torch.eye(sigmas.shape[-1])[None, ...])
+
     return A
-    
-'''
+
+
+"""
 ### Isolating Wasserstein and Testing it
 
 # Wasserstein with Cholesky
@@ -118,119 +128,129 @@ for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
 ## Results: 
 ### 1- Cholesky results are different from that of SVD and Sqrtm. SVD and Sqrtm are almost the same except for one entry in [23,24].
 ### 2- SVD takes about 2.5 seconds to compute while Sqrtm only takes about 0.5 seconds.
-'''
+"""
 
 ## Comparing Wasserstein and Torch Compatible Wasserstein
 
 
 def wasserstein(sigma1, sigma2, mu1=None, mu2=None):
-    
+
     # these conditions do not check for one mean is non zero and other is zero !!!
     if mu1 is not None and mu2 is not None:
-        means_term = np.linalg.norm(mu1 - mu2, 2)**2
+        means_term = np.linalg.norm(mu1 - mu2, 2) ** 2
     else:
-        means_term=0
-        
+        means_term = 0
+
     sig1_sqrt = scipy.linalg.sqrtm(sigma1)
     sig1_sig2_sqrt = scipy.linalg.sqrtm(sig1_sqrt @ sigma2 @ sig1_sqrt)
-    tr_term = sigma1 + sigma2 - 2*(sig1_sig2_sqrt) 
+    tr_term = sigma1 + sigma2 - 2 * (sig1_sig2_sqrt)
     d_sq = means_term + np.trace(tr_term)
 
-    
-    if d_sq<0 and d_sq>-1e-7:
+    if d_sq < 0 and d_sq > -1e-7:
         d_sq = 0
-    
+
     elif d_sq < -1e-7:
         raise ValueError(f"Wasserstein distance cannot be negative. Value is: {d_sq}")
-    
+
     return d_sq**0.5
 
+
 def wasserstein_torch_comp(sigma1, sigma2, mu1=None, mu2=None):
-    
+
     # these conditions do not check for one mean is non zero and other is zero !!!
     if mu1 is not None and mu2 is not None:
-        means_term = np.linalg.norm(mu1 - mu2, 2)**2
+        means_term = np.linalg.norm(mu1 - mu2, 2) ** 2
     else:
-        means_term=0
-    
+        means_term = 0
+
     if type(sigma1) != torch.Tensor:
         sigma1 = torch.tensor(sigma1)
     if type(sigma2) != torch.Tensor:
         sigma2 = torch.tensor(sigma2)
-        
+
     E_sig1, V_sig1 = torch.linalg.eigh(sigma1)
     sig1_sqrt = (V_sig1 * torch.sqrt(E_sig1)) @ V_sig1.T
-    
+
     sig12 = sig1_sqrt @ sigma2 @ sig1_sqrt
     E_sig12, V_sig12 = torch.linalg.eigh(sig12)
     sig1_sig2_sqrt = (V_sig12 * torch.sqrt(E_sig12)) @ V_sig12.T
-    
-    tr_term = sigma1 + sigma2 - 2*(sig1_sig2_sqrt) 
+
+    tr_term = sigma1 + sigma2 - 2 * (sig1_sig2_sqrt)
     d_sq = means_term + torch.trace(tr_term)
-    
-    if d_sq<0 and d_sq>-1e-7:
+
+    if d_sq < 0 and d_sq > -1e-7:
         d_sq = 0
-    
+
     elif d_sq < -1e-7:
         raise ValueError(f"Wasserstein distance cannot be negative. Value is: {d_sq}")
-    
+
     return d_sq**0.5
+
 
 def wasserstein_torch(sigmas, mu1=None, mu2=None):
-    
+
     # these conditions do not check for one mean is non zero and other is zero !!!
     if mu1 is not None and mu2 is not None:
-        means_term = np.linalg.norm(mu1 - mu2, 2)**2
+        means_term = np.linalg.norm(mu1 - mu2, 2) ** 2
     else:
-        means_term=0
-    
+        means_term = 0
+
     if type(sigmas) != torch.Tensor:
-        sigmas = torch.tensor(sigmas) # N, B=2, D1, D2
-       
-    E_sig, V_sig = torch.linalg.eigh(sigmas[:, 0:1, :, :]) # E_sig = N, B, D1   V_sig = N, B, D1, D2
+        sigmas = torch.tensor(sigmas)  # N, B=2, D1, D2
+
+    E_sig, V_sig = torch.linalg.eigh(
+        sigmas[:, 0:1, :, :]
+    )  # E_sig = N, B, D1   V_sig = N, B, D1, D2
     sigs_sqrt = torch.einsum("NBDG, NBG, NBKG -> NBDK", V_sig, torch.sqrt(E_sig), V_sig)
-    
-    sig12 = torch.einsum("NBDK, NBKL, NBLM -> NBDM", sigs_sqrt, sigmas[:, 1:2, :, :], sigs_sqrt)
+
+    sig12 = torch.einsum(
+        "NBDK, NBKL, NBLM -> NBDM", sigs_sqrt, sigmas[:, 1:2, :, :], sigs_sqrt
+    )
     E_sig12, V_sig12 = torch.linalg.eigh(sig12)
-    sig12_sqrt = torch.einsum("NBDG, NBG, NBKG -> NBDK", V_sig12, torch.sqrt(E_sig12), V_sig12)
-    
-    tr_term = sigmas[:, 0:1, :, :] + sigmas[:, 1:2, :, :] - 2*sig12_sqrt
+    sig12_sqrt = torch.einsum(
+        "NBDG, NBG, NBKG -> NBDK", V_sig12, torch.sqrt(E_sig12), V_sig12
+    )
+
+    tr_term = sigmas[:, 0:1, :, :] + sigmas[:, 1:2, :, :] - 2 * sig12_sqrt
     d_sq = means_term + tr_term.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
-    d_sq = d_sq[:,0]
+    d_sq = d_sq[:, 0]
     # if d_sq<0 and d_sq>-1e-7:
     #     d_sq = 0
-    
+
     # elif d_sq < -1e-7:
     #     raise ValueError(f"Wasserstein distance cannot be negative. Value is: {d_sq}")
-    
+
     return d_sq**0.5
 
-#covs = np.load("/home/sezan/Documents/BayesCompare/covs_1000_normalized.npy")
+
+# covs = np.load("/home/sezan/Documents/BayesCompare/covs_1000_normalized.npy")
 
 import pickle
 
-with open('/home/sezan/Documents/BayesCompare/covs_1000_all_resnets_all_layers.pkl', "rb") as f:
+with open(
+    "/home/sezan/Documents/BayesCompare/covs_1000_all_resnets_all_layers.pkl", "rb"
+) as f:
     covs_names = pickle.load(f)
 
 covs = []
 
 for cov_dict in covs_names:
-    
+
     covs.append(list(cov_dict.values()))
     layer_names = list(cov_dict.keys())
 
 covs = np.stack(covs)
 covs = covs.reshape(covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3])
 
-alpha = 10/11
+alpha = 10 / 11
 
 dist1 = np.zeros((len(covs), len(covs)))
 dist2 = np.zeros((len(covs), len(covs)))
 dist3 = np.zeros((len(covs), len(covs)))
 dist4 = np.zeros((len(covs), len(covs)))
 
-N =len(covs)
-N_total = int((N*(N-1))/2)
+N = len(covs)
+N_total = int((N * (N - 1)) / 2)
 
 upper_pairs = [(i, j) for j in range(N) for i in range(j + 1, N)]
 
@@ -238,51 +258,52 @@ covs_subset = []
 
 normed_covs = trace_norm_N(torch.Tensor(covs), eye_w=alpha)
 
+
 # for i in range(25):
 #     covs_subset.append([covs[upper_pairs[i]]])
-    
+
 # covs_subset = torch.Tensor(covs_subset)
 # for i in range(N_total):
 #     tens1 = torch.Tensor(normed_covs[upper_pairs[i][0]:upper_pairs[i][0]+1, :, :])
 #     tens2 = torch.Tensor(normed_covs[upper_pairs[i][1]:upper_pairs[i][1]+1, :, :])
 #     covs_subset.append(torch.concat((tens1, tens2), dim=0)[None, ...])
-    
+
 # covs_subset = torch.concat(covs_subset, dim=0)
-    
+
 # torch_out = wasserstein_torch(covs_subset)
 
 # for i in range(N_total):
 #     dist4[upper_pairs[i][0],upper_pairs[i][1]]=torch_out[i]
 #     dist4[upper_pairs[i][1],upper_pairs[i][0]]=dist4[upper_pairs[i][0],upper_pairs[i][1]]
 
-#for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
+# for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
 for i, ci in enumerate(covs):
-      
+
     sig1 = trace_norm(ci, eye_w=alpha)
-    
-    #for j, cj in tqdm.tqdm(enumerate(covs), total=len(covs), position=1):
-    for j, cj in enumerate(covs):   
+
+    # for j, cj in tqdm.tqdm(enumerate(covs), total=len(covs), position=1):
+    for j, cj in enumerate(covs):
         if j > i:
-            
+
             sig2 = trace_norm(cj, eye_w=alpha)
-            
+
             dist1[i, j] = wasserstein(sig1, sig2)
-            #dist2[i, j] = wasserstein_torch_comp(sig1, sig2)
-            #dist3[i, j] = wasserstein_torch(np.concat((sig1[None, None, :, :], sig2[None, None, :, :]), axis=1))
+            # dist2[i, j] = wasserstein_torch_comp(sig1, sig2)
+            # dist3[i, j] = wasserstein_torch(np.concat((sig1[None, None, :, :], sig2[None, None, :, :]), axis=1))
 
             dist1[j, i] = dist1[i, j]
-            #dist2[j, i] = dist2[i, j]
-            #dist3[j, i] = dist3[i, j]
+            # dist2[j, i] = dist2[i, j]
+            # dist3[j, i] = dist3[i, j]
 
-#diff_dist = dist1 - np.array(dist2)
+# diff_dist = dist1 - np.array(dist2)
 
-#if abs(np.max(diff_dist)) < 1e-7:
+# if abs(np.max(diff_dist)) < 1e-7:
 #    print("Distances are the same!")
 
 # Result: Indeed the two wasserstein computation return the same result.
 
 # Comparing JSD and JSD torch compatable
-'''
+"""
 # GPU-capable generator (falls back to CPU if CUDA unavailable)
 if torch.cuda.is_available():
     gen_torch = torch.Generator(device='cuda').manual_seed(42)
@@ -444,12 +465,12 @@ diff_dist = dist1 - np.array(dist2)
 
 if abs(np.max(diff_dist)) < 1e-7:
     print("Distances are the same!")
-'''    
+"""
 # Results: The maximum difference between JSD and torch compatible JSD is actually 0.0198 which is not so much negligible.
 
 
 # Comparing TVD and TVD torch compatable
-'''
+"""
 if torch.cuda.is_available():
     gen_torch = torch.Generator(device='cuda').manual_seed(42)
 else:
@@ -591,5 +612,5 @@ diff_dist = dist1 - np.array(dist2)
 
 if abs(np.max(diff_dist)) < 1e-7:
     print("Distances are the same!")
-    '''
+    """
 # Results: The maximum difference between TVD and torch compatible TVD is actually 0.012022903240433647 which is not so much negligible.
