@@ -7,7 +7,7 @@ from .normals import tvd_normal_general
 from .inference import inference
 from .inference import evidence
 from .inference import inference_cov
-from .distances import measure_dist
-from .distances import parallel_measure_dist
+from .distances import measure_dist_serial
+from .meas_dist_parallel import measure_dist_parallel
 from . import others
 
