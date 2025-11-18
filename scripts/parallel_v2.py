@@ -6,12 +6,11 @@ from scipy.linalg.blas import dtrmm as mm
 import time
 import os
 import torch
+from functools import partial
 
-output_file_dir='/home/sezan/Documents/BayesCompare/dists_deneme4.hdf5'
+output_file_dir='/home/sezan/Documents/BayesCompare/dists_deneme6_v2.hdf5'
 
-input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_resnet50_densesampled.npy'
-
-#input_dir = '/home/sezan/Documents/BayesCompare/covs_1000.npy'
+input_dir = '/home/sezan/Documents/BayesCompare/covs_1000.npy'
 
 ## Metrics
 
@@ -208,36 +207,7 @@ def bhattacharyya(sigma1, sigma2, mu1=None, mu2=None):
     d = 1/8*means_term + 1/2*log_term
     
     return d
-
-
-def init_vars(mtx_list, out_q, measure, alpha):
-    global G_Q, G_MTX, G_MEAS, G_ALPHA
-    G_Q = out_q
-    G_MTX = mtx_list
-    G_MEAS = measure
-    G_ALPHA = alpha
     
-def check_saved_hdf(hdf_dir, max_dim, N):
-    
-    if os.path.exists(hdf_dir):
-        
-        with h5py.File(hdf_dir, 'r') as f:
-            
-            indices_todo = f["indices_todo"][...]
-    else:
-        
-        with h5py.File(hdf_dir, 'w') as f:
-            
-            indices_todo = np.array([(i, j) for j in range(N) for i in range(j + 1, N)])
-        
-            ind_dset = f.create_dataset("indices_todo", data=indices_todo)
-            
-            res_dset = f.create_dataset("results", shape=(max_dim,), dtype=np.dtype([('i', 'uint16'), ('j', 'uint16'), ('res', 'float32')]))
-            
-            f.flush()
-         
-    return indices_todo
-
 def trace_norm(sigma, eye_w=0.001):
     
     if eye_w == 0:
@@ -248,6 +218,12 @@ def trace_norm(sigma, eye_w=0.001):
     
     return A
 
+
+def init_vars_func(out_q):
+    global G_Q
+    G_Q = out_q
+    
+    
 def select_measure(meas_name):
     
     if meas_name=='wasserstein':
@@ -271,81 +247,126 @@ def select_measure(meas_name):
     return measure
     
 
-def dist_workers(ind_tuple):
+def dist_workers_map_async(iterator_element, **kwargs):
+#def dist_workers_map_async(iterator_element):
+     
+    cov_i = iterator_element[1][0]
+    cov_j = iterator_element[1][1]
     
-    i = ind_tuple[0]
-    j = ind_tuple[1]
-    mi = G_MTX[i]
-    mj = G_MTX[j]
+    #measure = iterator_element[2]
+    queue = kwargs["queue"]
+    meas = kwargs["measure"]
     
-    
-    if G_MEAS in {jsd, tvd}:
-        res = G_MEAS(trace_norm(mi, G_ALPHA), trace_norm(mj, G_ALPHA), N=5000)
+    if meas in {jsd, tvd}:
+        res = meas(cov_i, cov_j, N=5000)
     else:
-        res = G_MEAS(trace_norm(mi, G_ALPHA), trace_norm(mj, G_ALPHA))
+        res = meas(cov_i, cov_j)
     
-    G_Q.put((i, j, res))
+    queue.put((int(iterator_element[0][0]), int(iterator_element[0][1]), res))
+    
+    #print((int(iterator_element[0][0]), int(iterator_element[0][1]), res))
+
+    #G_Q.put((int(iterator_element[0][0]), int(iterator_element[0][1]), res))
     
 
-def writer(file_dir, que, max_dim):
+def writer(file_dir, que):
     
     with h5py.File(file_dir, 'r+') as f:
         
-        res_dset = f["results"]
-        ind_todo = f["indices_todo"]
-        all_indices = np.array(ind_todo[...])
-        
-        last_len = max_dim - all_indices.shape[0]
+        res_dset = f["dist"]
         
         while 1:
             
-            m = que.get()
+            item = que.get()
             
-            if m is None:
+            if item is None:
                 break
             
-            res_dset[last_len] = m
-            done_idx = np.where((all_indices == np.array([m[0], m[1]])).all(axis=1))[0]
-            all_indices = np.delete(all_indices, done_idx, axis=0)
+            res_dset[item[0], item[1]] = item[2]
             
-            del f['indices_todo']
-            f.create_dataset('indices_todo', data=all_indices)
+            # print("Index: ",item[0], " ",item[1])
+            # print("Value: ", item[2])
             
             f.flush()
-            last_len += 1
 
-
-if __name__ == "__main__":
+def check_saved_hdf(hdf_dir, N, dtype):
     
-    meas_name = 'wasserstein'
-    
-    mtx_list = np.load(input_dir)
-    
-    N = len(mtx_list)
-    
-    manager = mp.Manager()
-    queues = manager.Queue()
-    
-    max_dim = int((N*(N-1))/2)
-    
-    measure = select_measure(meas_name)
-    
-    alpha =10/11
-    
-    indices = check_saved_hdf(output_file_dir, max_dim, N)
-    
-    if len(indices[...])==0:
-        print("Distance already calculated")
+    if os.path.exists(hdf_dir):
         
-    else:    
-        writer_procc = mp.Process(target=writer, args=(output_file_dir, queues, max_dim), daemon=True)
+        with h5py.File(hdf_dir, 'r') as f:
+            
+            dist = f["dist"][...]
+            
+            if dtype == 'numpy':
+                tril_idx = np.tril_indices(dist.shape[0], k=-1)
+                nan_mask = np.isnan(dist[tril_idx])
+                indices = [[int(i), int(j)] for i, j in zip(tril_idx[0][nan_mask], tril_idx[1][nan_mask])]
+            elif dtype == 'torch':
+                tril_idx = np.tril_indices(dist.shape[0], k=-1)
+                nan_mask = np.isnan(dist[tril_idx])
+                indices = [[int(i), int(j)] for i, j in zip(tril_idx[0][nan_mask], tril_idx[1][nan_mask])]
+            
+    else:
+        
+        with h5py.File(hdf_dir, 'w') as f:
+            
+            if dtype == 'numpy':
+                init_mtx =  np.empty((N,N)) * np.nan
+                
+            elif dtype == 'torch':
+                init_mtx =  torch.empty((N,N)) * float('nan')
+                
+            dist_dset = f.create_dataset("dist", shape=(N,N), data=init_mtx)
+            indices = np.array([(i, j) for j in range(N) for i in range(j + 1, N)])
+            
+            f.flush()
+         
+    return indices
+
+
+def meas_dist_map_async(covs, output_dir, mean=None, meas_name='TVD', alpha=None, b=1/100):
+    
+    N=len(covs) # maybe checking if covs is a numpy array of pickle file
+    
+    if isinstance(covs[0], np.ndarray):
+        dtype_covs = 'numpy'
+    elif isinstance(covs[0], torch.Tensor):
+        dtype_covs = 'tensor'
+        
+    indices = check_saved_hdf(output_dir, N, dtype_covs)
+    
+    cov_pairs = [(covs[i], covs[j]) for (i, j) in indices]
+    
+    #meas_name_list = [meas_name]*len(indices)
+    
+    meas = select_measure(meas_name)
+    
+    #iterator = zip(indices, cov_pairs, meas_name_list)
+    iterator = zip(indices, cov_pairs)
+    
+    if alpha==None:
+        alpha = N * b / (1 + (N * b))
+        
+    if len(indices)==0:
+        print("Distance already calculated.")
+        
+    else: 
+        
+        manager = mp.Manager()
+        queues = manager.Queue()
+        
+        partial_dist_workers_map_async = partial(dist_workers_map_async, measure=meas, queue=queues)
+        
+        writer_procc = mp.Process(target=writer, args=(output_file_dir, queues), daemon=True)
         writer_procc.start()
         
         start = time.time()
         
-        with mp.Pool(processes=mp.cpu_count()-1, initializer=init_vars, initargs=(mtx_list, queues, measure, alpha)) as pool:
+        with mp.Pool(processes=mp.cpu_count()-1) as pool:
+        #with mp.Pool(processes=mp.cpu_count()-1, initializer=init_vars_func, initargs=(queues,)) as pool:
 
-            pool.map_async(dist_workers, indices)
+            result = pool.map_async(partial_dist_workers_map_async, iterator)
+            #pool.map_async(dist_workers_map_async, iterator)
                 
             pool.close()
             pool.join()
@@ -355,6 +376,18 @@ if __name__ == "__main__":
         queues.put(None)
         writer_procc.join()
 
-        print(f"Total duration is: {end-start} for {max_dim} operations - map_async")
+        print(f"Total duration is: {end-start} for {len(indices)} operations - map_async")
 
-## Result: Total duration is: 302.2398147583008 for 300 operations - map_async
+# deneme1: Total duration is: 521.0778832435608 for 300 operations - map_async
+# deneme2: Total duration is: 520.4090838432312 for 300 operations - map_async
+
+if __name__ == "__main__":
+    
+    covs = np.load(input_dir)
+    norm_covs = []
+    for cov in covs:
+        norm_covs.append(trace_norm(cov))
+    
+    meas_dist_map_async(covs, output_file_dir, input_dir, meas_name='wasserstein')
+    
+   

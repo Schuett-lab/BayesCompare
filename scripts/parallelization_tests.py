@@ -336,32 +336,23 @@ def writer(file_dir, que, total_num_ops):
             
             progress_bar.update(1)
 
-def check_saved_hdf(hdf_dir, N, dtype):
+def check_saved_hdf(hdf_dir, N):
     
     if os.path.exists(hdf_dir):
         
         with h5py.File(hdf_dir, 'r') as f:
             
             dist = f["dist"][...]
-            
-            if dtype == 'numpy':
-                tril_idx = np.tril_indices(dist.shape[0], k=-1)
-                nan_mask = np.isnan(dist[tril_idx])
-                indices = [[int(i), int(j)] for i, j in zip(tril_idx[0][nan_mask], tril_idx[1][nan_mask])]
-            elif dtype == 'torch':
-                tril_idx = np.tril_indices(dist.shape[0], k=-1)
-                nan_mask = np.isnan(dist[tril_idx])
-                indices = [[int(i), int(j)] for i, j in zip(tril_idx[0][nan_mask], tril_idx[1][nan_mask])]
-            
+
+            tril_idx = np.tril_indices(dist.shape[0], k=-1)
+            nan_mask = np.isnan(dist[tril_idx])
+            indices = [[int(i), int(j)] for i, j in zip(tril_idx[0][nan_mask], tril_idx[1][nan_mask])]
+
     else:
         
         with h5py.File(hdf_dir, 'w') as f:
             
-            if dtype == 'numpy':
-                init_mtx =  np.empty((N,N)) * np.nan
-                
-            elif dtype == 'torch':
-                init_mtx =  torch.empty((N,N)) * float('nan')
+            init_mtx =  np.empty((N,N)) * np.nan
                 
             dist_dset = f.create_dataset("dist", shape=(N,N), data=init_mtx)
             indices = np.array([(i, j) for j in range(N) for i in range(j + 1, N)])
@@ -373,19 +364,13 @@ def check_saved_hdf(hdf_dir, N, dtype):
 
 def meas_dist_map_async_global(covs, mean=None, meas_name='TVD', alpha=None, b=1/100):
     
-    N=len(covs) # maybe checking if covs is a numpy array of pickle file
-    
-    if isinstance(covs[0], np.ndarray):
-        dtype_covs = 'numpy'
-    elif isinstance(covs[0], torch.Tensor):
-        dtype_covs = 'tensor'
-        
+    N=len(covs) # maybe checking if covs is a numpy array of pickle file'
         
     # Global consts
     
-    output_file_dir='/home/sezan/Documents/BayesCompare/parallel_tests_global_densesampled.hdf5'
+    output_file_dir='/home/sezan/Documents/BayesCompare/parallel_tests_outs/parallel_tests_global_allayers.hdf5'
 
-    indices = check_saved_hdf(output_file_dir, N, dtype_covs)
+    indices = check_saved_hdf(output_file_dir, N)
     
     nof_operations = len(indices)
 
@@ -424,18 +409,12 @@ def meas_dist_map_async_global(covs, mean=None, meas_name='TVD', alpha=None, b=1
 def meas_dist_map_async_global_queue(covs, mean=None, meas_name='TVD', alpha=None, b=1/100):
     
     N=len(covs) # maybe checking if covs is a numpy array of pickle file
-    
-    if isinstance(covs[0], np.ndarray):
-        dtype_covs = 'numpy'
-    elif isinstance(covs[0], torch.Tensor):
-        dtype_covs = 'tensor'
-        
-        
+         
     # Global consts - queue
     
-    output_file_dir='/home/sezan/Documents/BayesCompare/parallel_tests_global_queue_densesampled.hdf5'
+    output_file_dir='/home/sezan/Documents/BayesCompare/parallel_tests_outs/parallel_tests_global_queue_allayers.hdf5'
 
-    indices = check_saved_hdf(output_file_dir, N, dtype_covs)
+    indices = check_saved_hdf(output_file_dir, N)
     
     nof_operations = len(indices)
     
@@ -455,8 +434,12 @@ def meas_dist_map_async_global_queue(covs, mean=None, meas_name='TVD', alpha=Non
         
     else: 
         
-        manager = mp.Manager()
-        queues = manager.Queue()
+        worker_count = (mp.cpu_count()-1)
+        
+        #manager = mp.Manager()
+        #queues = manager.Queue(2 * worker_count)
+        
+        queues = mp.Queue(2 * worker_count)
         
         writer_procc = mp.Process(target=writer, args=(output_file_dir, queues, nof_operations), daemon=True)
         writer_procc.start()
@@ -465,7 +448,7 @@ def meas_dist_map_async_global_queue(covs, mean=None, meas_name='TVD', alpha=Non
 
         with mp.Pool(processes=mp.cpu_count()-1, initializer=init_vars_func, initargs=(queues,)) as pool:
 
-            pool.map_async(dist_workers_map_async_global_queue, iterator)
+            pool.map_async(dist_workers_map_async_global_queue, iterator, chunksize=200)
                 
             pool.close()
             pool.join()
@@ -482,14 +465,9 @@ def meas_dist_map_async_partial(covs, mean=None, meas_name='TVD', alpha=None, b=
     
     N=len(covs) # maybe checking if covs is a numpy array of pickle file
     
-    if isinstance(covs[0], np.ndarray):
-        dtype_covs = 'numpy'
-    elif isinstance(covs[0], torch.Tensor):
-        dtype_covs = 'tensor'
+    output_file_dir='/home/sezan/Documents/BayesCompare/parallel_tests_outs/parallel_tests_partial_allayers.hdf5'    
     
-    output_file_dir='/home/sezan/Documents/BayesCompare/parallel_tests_partial_densesampled.hdf5'    
-    
-    indices = check_saved_hdf(output_file_dir, N, dtype_covs)
+    indices = check_saved_hdf(output_file_dir, N)
     
     nof_operations = len(indices)
     
@@ -507,8 +485,10 @@ def meas_dist_map_async_partial(covs, mean=None, meas_name='TVD', alpha=None, b=
         
     else: 
         
+        worker_count = (mp.cpu_count()-1)
+        
         manager = mp.Manager()
-        queues = manager.Queue()
+        queues = manager.Queue(2 * worker_count)
         
         partial_dist_workers_map_async = partial(dist_workers_map_async_partial, measure=meas, queue=queues)
         
@@ -519,7 +499,7 @@ def meas_dist_map_async_partial(covs, mean=None, meas_name='TVD', alpha=None, b=
         
         with mp.Pool(processes=mp.cpu_count()-1) as pool:
 
-            pool.map_async(partial_dist_workers_map_async, iterator)
+            pool.map_async(partial_dist_workers_map_async, iterator, chunksize=200)
                 
             pool.close()
             pool.join()
@@ -536,16 +516,13 @@ def meas_dist_starmap_async(covs, mean=None, meas_name='TVD', alpha=None, b=1/10
     
     N=len(covs) # maybe checking if covs is a numpy array of pickle file
     
-    if isinstance(covs[0], np.ndarray):
-        dtype_covs = 'numpy'
-    elif isinstance(covs[0], torch.Tensor):
-        dtype_covs = 'tensor'
+    output_file_dir='/home/sezan/Documents/BayesCompare/parallel_tests_outs/parallel_tests_starmap_allayers.hdf5'    
     
-    output_file_dir='/home/sezan/Documents/BayesCompare/parallel_tests_starmap_densesampled.hdf5'    
-    
-    indices = check_saved_hdf(output_file_dir, N, dtype_covs)
+    indices = check_saved_hdf(output_file_dir, N)
     
     nof_operations = len(indices)
+    
+    worker_count = (mp.cpu_count()-1)
     
     #cov_pairs = [(covs[i], covs[j]) for (i, j) in indices]
     
@@ -560,7 +537,7 @@ def meas_dist_starmap_async(covs, mean=None, meas_name='TVD', alpha=None, b=1/10
     else: 
         
         manager = mp.Manager()
-        queues = manager.Queue()
+        queues = manager.Queue(2 * worker_count)
         
         writer_procc = mp.Process(target=writer, args=(output_file_dir, queues, nof_operations), daemon=True)
         writer_procc.start()
@@ -583,19 +560,97 @@ def meas_dist_starmap_async(covs, mean=None, meas_name='TVD', alpha=None, b=1/10
 
         print(f"Total duration is: {end-start} for {len(indices)} operations - starmap_async")
 
+def non_parallel(covs):
+    
+    N = len(covs)   
+
+    dist = np.zeros((len(covs), len(covs)))
+    
+    progress_bar = tqdm.tqdm(total=int((N*(N-1))/2))
+
+    start = time.time()
+
+    for i, ci in enumerate(covs):
+        
+        for j, cj in enumerate(covs):
+            
+            if j > i:
+                
+                dist[i, j] = wasserstein(ci, cj)
+                
+                dist[j, i] = dist[i, j]
+                
+                progress_bar.update(1)
+
+    end = time.time()
+
+    print(f"Total duration is: {end-start} for {int((N*(N-1))/2)} operations - normal")
 
 if __name__ == "__main__":
     
     #input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_normalized.npy'
     input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_resnet50_densesampled_normalized.npy'
+    #input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_all_resnets_all_layers_normalized.npy'
     
     covs = np.load(input_dir)
-    meas_dist_map_async_global(covs, input_dir, meas_name='wasserstein')
-    #meas_dist_map_async_global_queue(covs, input_dir, meas_name='wasserstein')
+    
+    ### Parallel approaches
+    
+    #meas_dist_map_async_global(covs, input_dir, meas_name='wasserstein')
+    meas_dist_map_async_global_queue(covs, input_dir, meas_name='wasserstein')
     #meas_dist_map_async_partial(covs, input_dir, meas_name='wasserstein')
     #meas_dist_starmap_async(covs, input_dir, meas_name='wasserstein')
+    
+    ### Non-parallel approach
+    
+    #non_parallel(covs) 
+
+# ----- Small Covs List - covs_1000.npy   -------
 
 # Total duration is: 290.78909182548523 for 300 operations - map_async + global pass
 # Total duration is: 296.02053475379944 for 300 operations - map_async + global queue pass
 # Total duration is: 295.746386051178 for 300 operations - map_async - partial pass
 # Total duration is: 307.9117214679718 for 300 operations - starmap_async
+
+# Total duration is: 183.2870111465454 for 300 operations - non-parallel
+
+# ----- Larger Covs List - densesampled   -------
+
+# Estimated time by tqdm for map_async + global pass --- increments weirdly, not one by one 
+# 1%|█▏                    | 231/37128 [03:30<1:55:01,  5.35it/s]
+
+# Estimated time by tqdm for   --- **crashes after ~4mins**
+# 0%|▊                     | 173/36910 [03:30<8:32:02,  1.20it/s
+
+# Estimated time by tqdm for map_async + global queue pass --- 
+# chunksize = 20
+# 1%|█▎                    | 237/36935 [03:48<6:27:18,  1.58it/s]
+
+# chunksize = 50
+# 1%|█▏                    | 223/36674 [03:49<5:17:37,  1.91it/s]
+
+# chunksize = 200
+# 1%|█                     | 202/36417 [03:37<7:23:39,  1.36it/s]
+
+# Estimated time by tqdm for map_async - partial pass --- **crashes after ~4mins**
+# 0%|█                     | 175/37128 [03:33<10:01:17,  1.02it/s]
+
+# chunksize = 20
+# 1%|█▎                                   | 248/36899 [04:00<7:15:27,  1.40it/s]
+
+# chunksize = 200 **crashed after ~9 mins**
+# 1%|█▎                                   | 238/36538 [04:13<4:40:10,  2.16it/s]
+
+# Estimated time by tqdm for map_async - starmap_async ---
+# 1%|█▎                    | 206/37128 [03:34<15:36:41,  1.52s/it]
+# Total duration is: 33459.614587306976 for 37128 operations - starmap_async -- 9:17:39
+
+# Estimated time by tqdm for Normal computations
+# 1%|█▊                    | 369/37128 [03:56<6:30:20,  1.57it/s]
+
+# ----- Largest Covs List - alllayers   -------
+
+# Estimated time by tqdm for map_async - starmap_async --- crashed
+
+# Non-parallel
+#   0%|▎                   | 431/386760 [04:25<69:46:20,  1.54it/s

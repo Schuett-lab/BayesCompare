@@ -135,6 +135,7 @@ def wasserstein(sigma1, sigma2, mu1=None, mu2=None):
     sig1_sig2_sqrt = scipy.linalg.sqrtm(sig1_sqrt @ sigma2 @ sig1_sqrt)
     tr_term = sigma1 + sigma2 - 2*(sig1_sig2_sqrt) 
     d_sq = means_term + np.trace(tr_term)
+
     
     if d_sq<0 and d_sq>-1e-7:
         d_sq = 0
@@ -204,7 +205,22 @@ def wasserstein_torch(sigmas, mu1=None, mu2=None):
     
     return d_sq**0.5
 
-covs = np.load("/home/sezan/Documents/BayesCompare/covs_1000.npy")
+#covs = np.load("/home/sezan/Documents/BayesCompare/covs_1000_normalized.npy")
+
+import pickle
+
+with open('/home/sezan/Documents/BayesCompare/covs_1000_all_resnets_all_layers.pkl', "rb") as f:
+    covs_names = pickle.load(f)
+
+covs = []
+
+for cov_dict in covs_names:
+    
+    covs.append(list(cov_dict.values()))
+    layer_names = list(cov_dict.keys())
+
+covs = np.stack(covs)
+covs = covs.reshape(covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3])
 
 alpha = 10/11
 
@@ -226,41 +242,42 @@ normed_covs = trace_norm_N(torch.Tensor(covs), eye_w=alpha)
 #     covs_subset.append([covs[upper_pairs[i]]])
     
 # covs_subset = torch.Tensor(covs_subset)
-for i in range(N_total):
-    tens1 = torch.Tensor(normed_covs[upper_pairs[i][0]:upper_pairs[i][0]+1, :, :])
-    tens2 = torch.Tensor(normed_covs[upper_pairs[i][1]:upper_pairs[i][1]+1, :, :])
-    covs_subset.append(torch.concat((tens1, tens2), dim=0)[None, ...])
+# for i in range(N_total):
+#     tens1 = torch.Tensor(normed_covs[upper_pairs[i][0]:upper_pairs[i][0]+1, :, :])
+#     tens2 = torch.Tensor(normed_covs[upper_pairs[i][1]:upper_pairs[i][1]+1, :, :])
+#     covs_subset.append(torch.concat((tens1, tens2), dim=0)[None, ...])
     
-covs_subset = torch.concat(covs_subset, dim=0)
+# covs_subset = torch.concat(covs_subset, dim=0)
     
-torch_out = wasserstein_torch(covs_subset)
+# torch_out = wasserstein_torch(covs_subset)
 
-for i in range(N_total):
-    dist4[upper_pairs[i][0],upper_pairs[i][1]]=torch_out[i]
-    dist4[upper_pairs[i][1],upper_pairs[i][0]]=dist4[upper_pairs[i][0],upper_pairs[i][1]]
+# for i in range(N_total):
+#     dist4[upper_pairs[i][0],upper_pairs[i][1]]=torch_out[i]
+#     dist4[upper_pairs[i][1],upper_pairs[i][0]]=dist4[upper_pairs[i][0],upper_pairs[i][1]]
 
-for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
-    
+#for i, ci in tqdm.tqdm(enumerate(covs), total=len(covs)):
+for i, ci in enumerate(covs):
+      
     sig1 = trace_norm(ci, eye_w=alpha)
     
-    for j, cj in tqdm.tqdm(enumerate(covs), total=len(covs), position=1):
-        
+    #for j, cj in tqdm.tqdm(enumerate(covs), total=len(covs), position=1):
+    for j, cj in enumerate(covs):   
         if j > i:
             
             sig2 = trace_norm(cj, eye_w=alpha)
             
             dist1[i, j] = wasserstein(sig1, sig2)
-            dist2[i, j] = wasserstein_torch_comp(sig1, sig2)
-            dist3[i, j] = wasserstein_torch(np.concat((sig1[None, None, :, :], sig2[None, None, :, :]), axis=1))
+            #dist2[i, j] = wasserstein_torch_comp(sig1, sig2)
+            #dist3[i, j] = wasserstein_torch(np.concat((sig1[None, None, :, :], sig2[None, None, :, :]), axis=1))
 
             dist1[j, i] = dist1[i, j]
-            dist2[j, i] = dist2[i, j]
-            dist3[j, i] = dist3[i, j]
+            #dist2[j, i] = dist2[i, j]
+            #dist3[j, i] = dist3[i, j]
 
-diff_dist = dist1 - np.array(dist2)
+#diff_dist = dist1 - np.array(dist2)
 
-if abs(np.max(diff_dist)) < 1e-7:
-    print("Distances are the same!")
+#if abs(np.max(diff_dist)) < 1e-7:
+#    print("Distances are the same!")
 
 # Result: Indeed the two wasserstein computation return the same result.
 

@@ -22,6 +22,8 @@ def writer(que, file_dir, total_num_ops):
         
         while 1:
             
+            #print("Output queue length is: " + str(len(que._buffer)))
+            
             item = que.get()
             
             if item is None:
@@ -37,7 +39,7 @@ def writer(que, file_dir, total_num_ops):
 ## corresponds to computation
 def wasserstein(sigma1, sigma2, mu1=None, mu2=None):
     
-    # these conditions do not check for one mean is non zero and other is zero !!!
+    #these conditions do not check for one mean is non zero and other is zero !!!
     if mu1 is not None and mu2 is not None:
         means_term = np.linalg.norm(mu1 - mu2, 2)**2
     else:
@@ -118,13 +120,17 @@ def starter(input_queue, covs, indices, meas_name):
     for i, j in indices:
             
         idx = (i, j)
-        input_queue.put((idx, (covs[i], covs[j]), meas_name)) # Example input combination
+        input_queue.put((idx, (covs[i], covs[j]), meas_name)) 
+        
+        #print("Input queue length is: " + str(len(input_queue._buffer)))
 
 
 if __name__ == "__main__":
     
-    input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_resnet50_densesampled_normalized.npy'
-    output_file_dir = '/home/sezan/Documents/BayesCompare/parallel_tests_heikos_bigone.hdf5'
+    input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_normalized.npy'
+    #input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_resnet50_densesampled_normalized.npy'
+    #input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_all_resnets_all_layers_normalized.npy'
+    output_file_dir = '/home/sezan/Documents/BayesCompare/parallel_tests_outs/heiko_dense.hdf5'
     covs = np.load(input_dir)
     meas_name = 'wasserstein'
     
@@ -140,7 +146,7 @@ if __name__ == "__main__":
     num_workers = mp.cpu_count()-1
     
     input_queue = Queue(2 * num_workers)
-    output_queue = Queue()
+    output_queue = Queue(2 * num_workers)
     
     indices = check_saved_hdf(output_file_dir, N, dtype_covs)
     
@@ -149,7 +155,7 @@ if __name__ == "__main__":
     p_starter.start()
     workers = []
     
-    #start = time.time()
+    start = time.time()
     
     for _ in range(num_workers):
         
@@ -170,12 +176,21 @@ if __name__ == "__main__":
         
         p.join()
         
-    #end = time.time()
+    end = time.time()
         
     output_queue.put((None)) # Send sentinel to writer
     p_writer.join()
     
     
-    #print(f"Total duration is: {end-start} for {len(indices)} operations - Heiko's approach")
+    print(f"Total duration is: {end-start} for {len(indices)} operations - Heiko's approach")
     
     # Total duration is: 301.1273567676544 for 300 operations - Heiko's approach
+    
+    # with the largest cov list - all layers
+    # 0%|▏                                                  | 285/386760 [04:23<89:21:31,  1.20it/s]
+    
+    ## ** no computations **
+    # 3%|█████▊                                             | 1000/37128 [00:36<22:27, 26.82it/s]
+    
+    ## ** no writers **
+    # Total duration is: 298.1766700744629 for 300 operations - Heiko's approach

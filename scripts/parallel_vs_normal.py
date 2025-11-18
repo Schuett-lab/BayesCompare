@@ -6,11 +6,9 @@ import time
 import tqdm
 from joblib import Parallel, delayed
 
-## Parlallel Computation
+output_file_dir='/home/sezan/Documents/BayesCompare/dists.hdf5'
 
-'''output_file_dir='/home/sezan/Documents/BayesCompare/dists.hdf5'
-
-input_dir = '/home/sezan/Documents/BayesCompare/covs_1000.npy'
+input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_all_resnets_all_layers.npy'
 
 def init_vars(mtx_list, out_q):
     global G_Q, G_MTX
@@ -47,8 +45,9 @@ def wasserstein(sigma1, sigma2, mu1=None, mu2=None):
         raise ValueError(f"Wasserstein distance cannot be negative. Value is: {d_sq}")
     
     return d_sq**0.5
-    
 
+## Parlallel Computation
+'''
 def dist_workers(ind_tuple):
     
     i = ind_tuple[0]
@@ -110,12 +109,13 @@ if __name__ == "__main__":
     queues.put(None)
     writer_procc.join()
 
-    print(f"Total duration is: {end-start} for {max_dim} operations - map_async")'''
-
+    print(f"Total duration is: {end-start} for {max_dim} operations - map_async")
+'''
 ## Result: Total duration is: 93.60919213294983 for 300 operations - map_async
     
 # Normal Computation
-'''input_dir = '/home/sezan/Documents/BayesCompare/covs_1000.npy'
+
+input_dir = '/home/sezan/Documents/BayesCompare/covs_1000.npy'
 
 covs = np.load(input_dir)
 
@@ -124,7 +124,7 @@ alpha = 10/11
 
 dist = np.zeros((len(covs), len(covs)))
 
-start = time.time()
+#start = time.time()
 
 for i, ci in enumerate(covs):
     
@@ -136,19 +136,24 @@ for i, ci in enumerate(covs):
             
             sig2 = trace_norm(cj, eye_w=alpha)
             
-            dist[i, j] = wasserstein(sig1, sig2)
+            start = time.time()
+            wasserstein(sig1, sig2)
+            end = time.time()
+            
+            print(f"Each distance calculation duration is: {end-start}")
 
-end = time.time()
+#end = time.time()
 
-print(f"Total duration is: {end-start} normal")
+#print(f"Total duration is: {end-start} normal")
 
 ## Result: Total duration is: 186.99659395217896 normal
+
+
+# Normal Computation with trace normalized matrices
 '''
-
-
 output_file_dir='/home/sezan/Documents/BayesCompare/dists.hdf5'
 
-input_dir = '/home/sezan/Documents/BayesCompare/covs_1000.npy'
+input_dir = '/home/sezan/Documents/BayesCompare/covs_1000_all_resnets_all_layers.npy'
 
 def init_vars(mtx_list, out_q):
     global G_Q, G_MTX
@@ -250,6 +255,6 @@ if __name__ == "__main__":
     queues.put(None)
     writer_procc.join()
 
-    print(f"Total duration is: {end-start} for {max_dim} operations - map_async with precalculated normalized mtx")
-    
+    print(f"Total duration is: {end-start} for {max_dim} operations - map_async with precalculated normalized mtx")'''
+
 ## Result: Total duration is: 94.5107831954956 for 300 operations - map_async with precalculated normalized mtx

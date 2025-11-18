@@ -37,7 +37,7 @@ if __name__ == "__main__":
     
     output_file_dir = "/home/sezan/Documents/BayesCompare/parallel_ops.hdf5"
     
-    m = 10 # number of matrices, one dim of output mtx
+    m = 20 # number of matrices, one dim of output mtx
     n = 1000 # one dim of cov mtx
     
     max_dim = int((m*(m-1))/2)
@@ -72,10 +72,11 @@ if __name__ == "__main__":
     
     print(f"Total duration is: {end-start} for {max_dim} operations - apply_async")'''
 
+## Result: Total duration is: 47.65972399711609 for 190 operations - apply_async (m=20 & n=1000)
 
 # version 2 - map async
-
-'''def init_vars(mtx_list, out_q):
+'''
+def init_vars(mtx_list, out_q):
     global G_Q, G_MTX
     G_Q = out_q
     G_MTX = mtx_list
@@ -146,12 +147,14 @@ if __name__ == "__main__":
     queues.put(None)
     writer_procc.join()
     
-    print(f"Total duration is: {end-start} for {max_dim} operations - map_async")'''
-    
+    print(f"Total duration is: {end-start} for {max_dim} operations - map_async")
+'''   
+## Result: Total duration is: 8.805874347686768 for 44850 operations - map_async (m=300 & n=1000)
+
 
 # version 3- starmap_async
-
-'''def init_vars(mtx_list, out_q):
+'''
+def init_vars(mtx_list, out_q):
     global G_Q, G_MTX
     G_Q = out_q
     G_MTX = mtx_list
@@ -220,10 +223,14 @@ if __name__ == "__main__":
     queues.put(None)
     writer_procc.join()
     
-    print(f"Total duration is: {end-start} for {max_dim} operations - starmap_async")'''
+    print(f"Total duration is: {end-start} for {max_dim} operations - starmap_async")
+'''
+## Result: Total duration is: 8.858367204666138 for 44850 operations - starmap_async (m=300 & n=1000)
 
 
-filname = "/home/sezan/Documents/BayesCompare/dists_parallel_wass.hdf5"
+
+#filname = "/home/sezan/Documents/BayesCompare/parallel_tests_starmap_allayers.hdf5"
+filname = "/home/sezan/Documents/BayesCompare/parallel_tests_outs/shared_memjoblib_small_1.hdf5"
 import matplotlib.pyplot as plt
 
 dist_mtx = np.zeros((25,25))
@@ -233,24 +240,28 @@ with h5py.File(filname, "r") as f:
     
     f.visititems(lambda name, obj: print(f"  {name}: {type(obj)}"))
     
-    dset = f["results"]
-    idx_set = f["indices_todo"]
-    
-    print("\nDataset info:")
-    print("  Shape:", dset.shape)
-    print("  Dtype:", dset.dtype)
-    print("  Attributes:", dict(dset.attrs))
-    
+    dset = f["dist"]
     data = dset[...]
-    idx = idx_set[...]
+
+    1+1
+    # dset = f["results"]
+    # idx_set = f["indices_todo"]
     
-    for dat in data:
-        i = dat[0]
-        j = dat[1]
-        val = dat[2]
+    # print("\nDataset info:")
+    # print("  Shape:", dset.shape)
+    # print("  Dtype:", dset.dtype)
+    # print("  Attributes:", dict(dset.attrs))
+    
+    # data = dset[...]
+    # idx = idx_set[...]
+    
+    # for dat in data:
+    #     i = dat[0]
+    #     j = dat[1]
+    #     val = dat[2]
         
-        dist_mtx[i, j] = val
-        dist_mtx[j, i] = val
+    #     dist_mtx[i, j] = val
+    #     dist_mtx[j, i] = val
         
 plt.figure()
 plt.imshow(dist_mtx, "bone", vmin=0, vmax=np.max(dist_mtx))
