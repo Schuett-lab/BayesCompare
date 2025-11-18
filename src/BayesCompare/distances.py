@@ -374,6 +374,47 @@ def bhattacharyya(sigma1, sigma2, mu1=None, mu2=None):
 
 ## no check points, no parallelization, single measure only and torch compatable (after correcting select measure for torch comp measures too)
 def measure_dist(covs, mean=None, meas_name="TVD", alpha=None, b=1 / 100):
+    """
+    Compute a symmetric pairwise distance matrix from the list of covariances.
+
+    This function takes a sequence of covariance matrices, applies a trace-normalization
+    step to each (via `trace_norm` with an `eye_w` regularizer), selects a distance/divergence
+    function by name (via `select_measure`), and computes the upper-triangular pairwise distances. The
+    result is returned as a symmetric NumPy array of shape (N, N), where N is the
+    number of input covariance matrices.
+
+    Parameters
+    ----------
+    covs : Sequence[array-like]
+        Iterable of covariance matrices (e.g., NumPy arrays). Each element is
+        passed to `trace_norm` before the pairwise distance is computed.
+    mean : array-like, optional
+        Mean parameter.
+    meas_name : str, optional
+        Name of the distance/divergence measure to use. This name is resolved via
+        `select_measure(meas_name)`. Default is "TVD".
+    alpha : float, optional
+        Weight applied inside `trace_norm` as the `eye_w` argument. If None,
+        alpha is computed from the number of input covariances `N = len(covs)` and
+        the parameter `b` using the formula
+        alpha = (N * b) / (1 + (N * b)). Default is None.
+    b : float, optional
+        Scalar used to compute a default `alpha` when `alpha` is None. Default is
+        1/100.
+
+    Returns
+    -------
+    dist : numpy.ndarray
+        A symmetric 2-D array of shape (N, N) containing pairwise distances
+        between trace-normalized covariance inputs. The diagonal elements are zero.
+        Only the upper triangle (j > i) is computed explicitly and mirrored to the
+        lower triangle.
+
+    Examples
+    --------
+    >>> # Given a list of covariance matrices `cov_list`
+    >>> dist_matrix = measure_dist(cov_list, meas_name="TVD")
+    """
 
     N = len(covs)
 
