@@ -359,7 +359,7 @@ def bhattacharyya(sigma1, sigma2, mu1=None, mu2=None):
 ## Distance function caller
 
 ## no check points, no parallelization, single measure only and torch compatable (after correcting select measure for torch comp measures too)
-def measure_dist_serial(covs, mean=None, meas_name='TVD', alpha=None, b=1/100):
+def measure_dist(covs, mean=None, meas_name='TVD', alpha=None, b=1/100):
     
     N=len(covs)
     

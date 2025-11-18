@@ -34,6 +34,15 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
          
     return indices, hdf_filename
 
+def check_normalization(covs, tolerance=1e-4):
+    
+    #randomly select one cov matric from the list
+    idx = np.random.randint(len(covs))
+    
+    trace_cov = covs[idx].trace()
+    
+    return abs(trace_cov - len(covs[idx]))<tolerance
+
 def writer(file_dir, que, total_num_ops):
     
     progress_bar = tqdm.tqdm(total=int(total_num_ops))
@@ -97,6 +106,8 @@ def measure_dist_parallel(covs_dir, output_dir, mean=None, meas_name='TVD', num_
         meas_name = [meas_name]
     
     covs, covs_filename = load_covs(covs_dir)
+    
+    assert check_normalization(covs), "Invalid Operation: covariance matrices has to be trace normalized."
     
     N=len(covs)
     
