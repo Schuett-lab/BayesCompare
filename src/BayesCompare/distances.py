@@ -421,7 +421,11 @@ def measure_dist(covs, mean=None, meas_name="TVD", alpha=None, b=1 / 100):
     if alpha == None:
         alpha = N * b / (1 + (N * b))
 
-    measure = select_measure(meas_name)
+    if isinstance(covs[0], np.ndarray):
+        measure = select_measure(meas_name)
+
+    elif isinstance(covs[0], torch.Tensor):
+        measure = select_measure_torch(meas_name)
 
     dist = np.zeros((N, N))
 
@@ -488,5 +492,19 @@ def select_measure(meas_name):
 
     elif meas_name == "bhattacharyya":
         measure = bhattacharyya
+
+    return measure
+
+
+def select_measure_torch(meas_name):
+
+    if meas_name == "wasserstein":
+        measure = wasserstein_torch_comp
+
+    elif meas_name == "TVD":
+        measure = tvd_torch_comp
+
+    elif meas_name == "JSD":
+        measure = jsd_torch_comp
 
     return measure
