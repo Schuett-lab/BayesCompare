@@ -56,7 +56,7 @@ def jsd_normal_sig(sigma1, sigma2, N=10000, eye_w=0.0, gen=gen):
     k = sigma1.shape[0]
     A1 = trace_norm(sigma1, eye_w)
     A2 = trace_norm(sigma2, eye_w)
-    logdet1 = np.sum(np.log(np.diag(A1)))
+    logdet1 = np.sum(np.log(np.diag(A1))) # half of the logdet
     logdet2 = np.sum(np.log(np.diag(A2)))
     # generate random samples from each distribution
     x10 = gen.standard_normal(size=(k, N))
