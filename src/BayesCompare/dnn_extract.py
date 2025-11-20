@@ -25,15 +25,20 @@ def get_cov(activations):
     This assumes the first dimension of the activations tensor is the stimulus
     dimension.
     """
+
     if torch.is_tensor(activations):
+        module = torch
         # x = activations.detach().clone() # we dont want the covs to be detached from the graph because we would like to use them for training
-        x = torch.reshape(activations, [activations.shape[0], -1])
-        x -= torch.mean(x, 1, keepdim=True)
-        return torch.matmul(x, x.T)
-    else:
-        x = np.reshape(activations, [activations.shape[0], -1])
-        x -= np.mean(x, 1, keepdims=True)
-        return np.matmul(x, x.T)
+    elif isinstance(activations, np.array):
+        module = np
+    else:  # Also we can catch bad arguments (not mandatory)
+        raise NotImplementedError(
+            "Activations must be either a torch tensor or a numpy array."
+        )
+
+    x = module.reshape(activations, [activations.shape[0], -1])
+    x -= module.mean(x, 1, keepdims=True)
+    return module.matmul(x, x.T)
 
 
 def cov_extractor(
