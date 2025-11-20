@@ -3,6 +3,7 @@ import scipy.linalg
 from scipy.linalg.blas import dtrmm as mm
 import tqdm
 import torch
+import functools
 
 ## Metrics
 
@@ -87,12 +88,12 @@ def mahalanobis(
 gen = np.random.Generator(np.random.SFC64(42))
 
 if torch.cuda.is_available():
-    gen_torch = torch.Generator(device="cuda").manual_seed(42)
+    gen_torch_cuda = torch.Generator(device="cuda").manual_seed(42)
 else:
-    gen_torch = torch.Generator(device="cpu").manual_seed(42)
+    gen_torch_cpu = torch.Generator(device="cpu").manual_seed(42)
 
 
-def jsd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen):
+def jsd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
 
     if mu1 is None and mu2 is None:
         k = sigma1.shape[0]
@@ -152,7 +153,7 @@ def jsd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen):
     return max(0, jsd)
 
 
-def jsd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen_torch):
+def jsd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
 
     if type(sigma1) != torch.Tensor:
         sigma1 = torch.tensor(sigma1)
@@ -218,7 +219,7 @@ def jsd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen_torch):
     return max(0, jsd)
 
 
-def tvd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen):
+def tvd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
 
     if mu1 is not None and mu2 is not None:
         k = len(mu1)
@@ -270,7 +271,7 @@ def tvd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen):
     return max(0, tvd)
 
 
-def tvd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=gen_torch):
+def tvd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
 
     if type(sigma1) != torch.Tensor:
         sigma1 = torch.tensor(sigma1)
@@ -480,10 +481,10 @@ def select_measure(cov_mtx, meas_name):
             measure = hellinger
 
         elif meas_name == "TVD":
-            measure = tvd
+            measure = functools.partial(tvd, gen=gen)
 
         elif meas_name == "JSD":
-            measure = jsd
+            measure = functools.partial(jsd, gen=gen)
 
         elif meas_name == "KL_div":
             measure = KL_div
@@ -502,10 +503,18 @@ def select_measure(cov_mtx, meas_name):
             measure = wasserstein_torch_comp
 
         elif meas_name == "TVD":
-            measure = tvd_torch_comp
+            # if cov mtx is on GPU, provide the TVD with the CUDA seeded generator, or else with the CPU seeded generator
+            if cov_mtx.is_cuda:
+                measure = functools.partial(tvd_torch_comp, gen=gen_torch_cuda)
+            else:
+                measure = functools.partial(tvd_torch_comp, gen=gen_torch_cpu)
 
         elif meas_name == "JSD":
-            measure = jsd_torch_comp
+            # if cov mtx is on GPU, provide the JSD with the CUDA seeded generator, or else with the CPU seeded generator
+            if cov_mtx.is_cuda:
+                measure = functools.partial(jsd_torch_comp, gen=gen_torch_cuda)
+            else:
+                measure = functools.partial(jsd_torch_comp, gen=gen_torch_cpu)
 
         else:
             raise NotImplementedError(
