@@ -421,11 +421,7 @@ def measure_dist(covs, mean=None, meas_name="TVD", alpha=None, b=1 / 100):
     if alpha == None:
         alpha = N * b / (1 + (N * b))
 
-    if isinstance(covs[0], np.ndarray):
-        measure = select_measure(meas_name)
-
-    elif isinstance(covs[0], torch.Tensor):
-        measure = select_measure_torch(meas_name)
+    measure = select_measure(covs[0], meas_name)
 
     dist = np.zeros((N, N))
 
@@ -473,38 +469,51 @@ def trace_norm(sigma, eye_w=0.001):
     return A
 
 
-def select_measure(meas_name):
+def select_measure(cov_mtx, meas_name):
 
-    if meas_name == "wasserstein":
-        measure = wasserstein
+    if isinstance(cov_mtx, np.ndarray):
 
-    elif meas_name == "hellinger":
-        measure = hellinger
+        if meas_name == "wasserstein":
+            measure = wasserstein
 
-    elif meas_name == "TVD":
-        measure = tvd
+        elif meas_name == "hellinger":
+            measure = hellinger
 
-    elif meas_name == "JSD":
-        measure = jsd
+        elif meas_name == "TVD":
+            measure = tvd
 
-    elif meas_name == "KL_div":
-        measure = KL_div
+        elif meas_name == "JSD":
+            measure = jsd
 
-    elif meas_name == "bhattacharyya":
-        measure = bhattacharyya
+        elif meas_name == "KL_div":
+            measure = KL_div
 
-    return measure
+        elif meas_name == "bhattacharyya":
+            measure = bhattacharyya
 
+        else:
+            raise NotImplementedError(
+                "Given metric name is not valid Numpy covariances."
+            )
 
-def select_measure_torch(meas_name):
+    elif isinstance(cov_mtx, torch.Tensor):
 
-    if meas_name == "wasserstein":
-        measure = wasserstein_torch_comp
+        if meas_name == "wasserstein":
+            measure = wasserstein_torch_comp
 
-    elif meas_name == "TVD":
-        measure = tvd_torch_comp
+        elif meas_name == "TVD":
+            measure = tvd_torch_comp
 
-    elif meas_name == "JSD":
-        measure = jsd_torch_comp
+        elif meas_name == "JSD":
+            measure = jsd_torch_comp
 
+        else:
+            raise NotImplementedError(
+                "Given metric name is not valid for Tensor covariances."
+            )
+
+    else:
+        raise NotImplementedError(
+            "Covariance matrices must be either a torch tensor or a numpy array."
+        )
     return measure
