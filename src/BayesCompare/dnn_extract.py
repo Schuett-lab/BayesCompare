@@ -29,7 +29,7 @@ def get_cov(activations):
     if torch.is_tensor(activations):
         module = torch
         # x = activations.detach().clone() # we dont want the covs to be detached from the graph because we would like to use them for training
-    elif isinstance(activations, np.array):
+    elif isinstance(activations, np.ndarray):
         module = np
     else:  # Also we can catch bad arguments (not mandatory)
         raise NotImplementedError(
