@@ -179,7 +179,7 @@ def measure_dist_parallel(
 
     for name in meas_name:
 
-        measure = dist.select_measure(name)
+        measure = dist.select_measure(covs[0], name)
 
         indices, output_filename = check_saved_hdf(output_dir, N, covs_filename, name)
 
