@@ -29,7 +29,6 @@ def read_sample_file(file_path):
 def test_evidence_score_io():
     sample_path = "tests/sample_data"
     input_args = {}
-    for input_file in ["input_y", "input_totvar", "input_epsvar", "input_covs_norm"]:
         print(os.getcwd(), os.path.join(sample_path, f"test_{input_file}*"))
         filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
         input_args[input_file] = read_sample_file(filename)
