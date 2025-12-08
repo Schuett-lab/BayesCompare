@@ -2,7 +2,7 @@ import numpy as np
 import scipy.linalg
 from scipy.linalg.blas import dtrmm as mm
 
-from .cov_utils import trace_norm
+from .cov_utils import cov_sigma, trace_norm
 
 gen = np.random.Generator(np.random.SFC64(42))
 
@@ -56,8 +56,8 @@ def jsd_normal_sig(sigma1, sigma2, N=10000, eye_w=0.0, gen=gen):
     before computing the jsd.
     """
     k = sigma1.shape[0]
-    A1 = np.linalg.cholesky(trace_norm(sigma1, eye_w))
-    A2 = np.linalg.cholesky(trace_norm(sigma2, eye_w))
+    A1 = np.linalg.cholesky(cov_sigma(trace_norm(sigma1), eye_w))
+    A2 = np.linalg.cholesky(cov_sigma(trace_norm(sigma2), eye_w))
     logdet1 = np.sum(np.log(np.diag(A1)))  # half of the logdet
     logdet2 = np.sum(np.log(np.diag(A2)))
     # generate random samples from each distribution
