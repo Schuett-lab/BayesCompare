@@ -3,9 +3,11 @@ import h5py
 import os
 from joblib import Parallel, delayed
 import multiprocessing as mp
-from BayesCompare import distances as dist
 import pickle
 import tqdm
+
+from BayesCompare import distances as dist
+from BayesCompare.cov_utils import _check_cov_normalized
 
 
 def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
@@ -40,16 +42,6 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
             f.flush()
 
     return indices, hdf_filename
-
-
-def check_normalization(covs, tolerance=1e-4):
-
-    # randomly select one cov matrix from the list
-    idx = np.random.randint(len(covs))
-
-    trace_cov = covs[idx].trace()
-
-    return abs(trace_cov - len(covs[idx])) < tolerance
 
 
 def writer(file_dir, que, total_num_ops):
@@ -171,8 +163,11 @@ def measure_dist_parallel(
 
     covs, covs_filename = load_covs(covs_dir)
 
-    assert check_normalization(
-        covs
+    # randomly select one cov matrix from the list and check normalization
+    idx = np.random.randint(len(covs))
+    cov = covs[idx]
+    assert _check_cov_normalized(
+        cov
     ), "Invalid Operation: covariance matrices has to be trace normalized."
 
     N = len(covs)
