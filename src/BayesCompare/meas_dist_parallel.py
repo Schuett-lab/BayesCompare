@@ -165,9 +165,8 @@ def measure_dist_parallel(
 
     # randomly select one cov matrix from the list and check normalization
     idx = np.random.randint(len(covs))
-    cov = covs[idx]
     assert _check_cov_normalized(
-        cov
+        covs[idx]
     ), "Invalid Operation: covariance matrices has to be trace normalized."
 
     N = len(covs)
