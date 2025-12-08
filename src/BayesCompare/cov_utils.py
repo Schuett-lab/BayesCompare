@@ -57,6 +57,6 @@ def _check_cov_normalized(cov, tolerance=1e-4):
     Check if the given covariance is trace normalized
     """
 
-    trace_cov = covs[idx].trace()
+    trace_cov = cov.trace()
 
-    return abs(trace_cov - len(covs[idx])) < tolerance
+    return abs(trace_cov - len(cov)) < tolerance
