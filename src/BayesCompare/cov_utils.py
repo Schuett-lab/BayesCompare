@@ -44,9 +44,10 @@ def cov_sigma(
         Modified covariance matrix that represents the variance of the
         predictive distribution of y
     """
-    N = cov.shape[0]
+    if not signal_var:
+        signal_var = 1 - noise_var
 
-    cov_sigma = signal_var * cov + noise_var * np.eye(N)
+    cov_sigma = signal_var * cov + noise_var * np.eye(cov.shape[0])
 
     return cov_sigma
 
