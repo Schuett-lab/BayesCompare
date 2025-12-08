@@ -5,6 +5,8 @@ import tqdm
 import torch
 import functools
 
+from .cov_utils import trace_norm, cov_sigma
+
 ## Metrics
 
 
@@ -430,13 +432,13 @@ def measure_dist(covs, mean=None, meas_name="TVD", alpha=None, b=1 / 100):
 
     for i, ci in enumerate(covs):
 
-        sig1 = trace_norm(ci, eye_w=alpha)
+        sig1 = cov_sigma(trace_norm(ci), noise_var=alpha)
 
         for j, cj in enumerate(covs):
 
             if j > i:
 
-                sig2 = trace_norm(cj, eye_w=alpha)
+                sig2 = cov_sigma(trace_norm(cj), noise_var=alpha)
 
                 if measure == jsd or measure == tvd:
                     dist[i, j] = measure(
@@ -452,22 +454,6 @@ def measure_dist(covs, mean=None, meas_name="TVD", alpha=None, b=1 / 100):
                 progress_bar.update(1)
 
     return dist
-
-
-## Helper functions
-
-
-def trace_norm(sigma, eye_w=0.001):
-
-    if eye_w == 0:
-        A = sigma
-
-    else:
-        A = ((1 - eye_w) * sigma * sigma.shape[0] / np.trace(sigma)) + (
-            eye_w * np.eye(sigma.shape[0])
-        )
-
-    return A
 
 
 def select_measure(cov_mtx, meas_name):
