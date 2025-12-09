@@ -8,6 +8,8 @@ from tqdm import tqdm
 from numpy.typing import NDArray
 from typing import Optional
 
+from .cov_utils import cov_sigma
+
 
 def inference(cov, y_train, alpha: float = 0.1):
     """calculates bayesian inference for the 0 mean Gaussian prediction
@@ -98,38 +100,6 @@ def inference_cov(cov, y_train, alpha: float = 0):
     return y_mu, y_sigma_post
 
 
-def sigma_cov(cov: NDArray, sigma_b: float, sigma_e: float) -> NDArray:
-    """
-    Multiply the (normalized) covariance matrix by the estimated variance of
-    the signal, and add the estimated variance of the noise, so the resulting
-    matrix represents the estimated total variance of the predictive distribution
-
-    Parameters
-    ----------
-
-    cov: np.array, shape (n_stim, n_stim)
-        Covariance matrix
-
-    sigma_b: float
-        Estimate of the variance attributed to the data
-
-    sigma_e: float
-        Estimate of the variance attributed to noise
-
-    Returns
-    -------
-
-    sigma_cov: NDArray
-        Modified covariance matrix that represents the variance of the
-        predictive distribution of y
-    """
-    N = cov.shape[0]
-
-    sigma_cov = sigma_b * cov + sigma_e * np.eye(N)
-
-    return sigma_cov
-
-
 def evidence(cov: NDArray, y: NDArray, mu: Optional[NDArray] = None) -> float:
     """
     Get the log-likelihood that a given model produces the activations observed
@@ -166,6 +136,7 @@ def evidence(cov: NDArray, y: NDArray, mu: Optional[NDArray] = None) -> float:
         ss = np.expand_dims(y - mu, 0) @ inner_inv @ np.expand_dims(y - mu, 1)
     logdet = np.linalg.slogdet(inner_inv)
     loglik = logdet.logabsdet / 2 - ss / 2 - N / 2 * np.log(2 * np.pi)
+
     return loglik
 
 
@@ -220,21 +191,21 @@ def loglik_score(
     if not isinstance(norm_covs, list):
         norm_covs = [norm_covs]
 
-    def voxel_loop(norm_covs, y, sigma_tot, sigma_e):
+    def voxel_loop(norm_covs, y, sigma_tot, noise_var):
         """Run evidence on one voxel and all models"""
-        sigma_b = sigma_tot - sigma_e
+        signal_var = sigma_tot - noise_var
 
         model_score = []  # One voxel, all layers
         for norm_cov in norm_covs:
-            s_cov = sigma_cov(norm_cov, sigma_b=sigma_b, sigma_e=sigma_e)
+            s_cov = cov_sigma(norm_cov, signal_var=signal_var, noise_var=noise_var)
             ev = evidence(s_cov, y)
             model_score.append(ev.flatten())
 
         return np.concatenate(model_score)
 
     model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
-        delayed(voxel_loop)(norm_covs, y, sigma_tot, sigma_e)
-        for y, sigma_tot, sigma_e in tqdm(
+        delayed(voxel_loop)(norm_covs, y, sigma_tot, noise_var)
+        for y, sigma_tot, noise_var in tqdm(
             zip(activations, total_var, eps_var), total=activations.shape[0]
         )
     )  # All voxels, all layers
