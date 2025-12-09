@@ -1,5 +1,6 @@
 from .dnn_extract import get_cov
 from .dnn_extract import cov_extractor
+from .dnn_extract import get_layer_names
 from .normals import jsd_normal_sig
 from .normals import jsd_normal_general
 from .normals import tvd_normal_sig
