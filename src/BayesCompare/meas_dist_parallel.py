@@ -7,7 +7,7 @@ import pickle
 import tqdm
 
 from BayesCompare import distances as dist
-from BayesCompare.cov_utils import _check_cov_normalized
+from BayesCompare.cov_utils import check_cov_normalized
 
 
 def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
@@ -165,7 +165,7 @@ def measure_dist_parallel(
 
     # randomly select one cov matrix from the list and check normalization
     idx = np.random.randint(len(covs))
-    assert _check_cov_normalized(
+    assert check_cov_normalized(
         covs[idx]
     ), "Invalid Operation: covariance matrices has to be trace normalized."
 
