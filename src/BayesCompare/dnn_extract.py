@@ -4,7 +4,7 @@ import re
 from collections import OrderedDict
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Union
-
+import warnings
 import torch
 from torchvision.models.feature_extraction import (
     NodePathTracer,
@@ -15,16 +15,51 @@ from torchvision.models.feature_extraction import (
 from torch import fx, nn
 
 
-def get_cov(activations):
+def check_act_dims(act, N):
+    """
+    Checks and reshapes activation tensor dimensions to ensure N is the first dimension.
+    This function verifies that the activation tensor contains a dimension equal to N, the
+    number of images used for obtaining the covariance matrix. If N is not the first dimension, the
+    tensor is permuted to move it to the first position. If N is not found in any dimension,
+    a warning is issued. If N is the first dimension the tensor itself is returned.
+    Args:
+        act (torch.Tensor): Activation tensor whose dimensions need to be checked and potentially reordered.
+        N (int): Number of images used for obtaining the covariance matrix. This dimension should exist in act.
+    Returns:
+        activations (torch.Tensor or None): The activation tensor with N as the first dimension, or None if N is not found
+        in any dimension of the input tensor.
+    Raises:
+        UserWarning: If N is not found in any dimension of the activation tensor.
+    """
+
+    shape = list(act.shape)
+
+    if shape[0] == N:
+        activations = act
+
+    elif N in shape:
+        n_dim = shape.index(N)  # find which dimension equals n
+        perm = [n_dim] + [i for i in range(len(shape)) if i != n_dim]
+        activations = act.permute(perm)
+
+    elif N not in shape:
+        warnings.warn("This layer does not have a number of images dimension")
+        return None
+
+    return activations
+
+
+def get_cov(activations, N=None):
     """computes the covariance matrix for a set of DNN activations
 
     This is the first step for calculating differences between
     predictive distributions, because random zero-mean weights will
     reproduce the covariance of the activations.
-
-    This assumes the first dimension of the activations tensor is the stimulus
-    dimension.
     """
+    # check if the first dimension of activations is equal to the number of images used
+    # if the number of images is provided as an input
+    if N != None:
+        activations = check_act_dims(activations, N)
 
     if torch.is_tensor(activations):
         module = torch
@@ -36,8 +71,8 @@ def get_cov(activations):
             "Activations must be either a torch tensor or a numpy array."
         )
 
-    x = module.reshape(activations, [activations.shape[0], -1])
-    x -= module.mean(x, 1, keepdims=True)
+    act = module.reshape(activations, [activations.shape[0], -1])
+    x = act - module.mean(act, 1, keepdims=True)
     return module.matmul(x, x.T)
 
 
