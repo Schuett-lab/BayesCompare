@@ -3,12 +3,13 @@ Module with helper functions to manipulate covariance matrices
 Authors: Juan Jesús Torre Tresols, Sezan Oral, Heiko Schütt
 """
 
+import torch
 import numpy as np
 
 from numpy.typing import NDArray
 
 
-def trace_norm(cov: NDArray) -> NDArray:
+def trace_norm(cov: NDArray | torch.Tensor) -> NDArray | torch.Tensor:
     """Normalize the covariance to have trace equal to its shape"""
 
     cov_norm = cov * cov.shape[0] / np.trace(cov)
@@ -17,8 +18,8 @@ def trace_norm(cov: NDArray) -> NDArray:
 
 
 def cov_sigma(
-    cov: NDArray, noise_var: float, signal_var: float | None = None
-) -> NDArray:
+    cov: NDArray | torch.Tensor, noise_var: float, signal_var: float | None = None
+) -> NDArray | torch.Tensor:
     """
     Multiply the (normalized) covariance matrix by the estimated variance of
     the signal, and add the estimated variance of the noise, so the resulting
@@ -27,7 +28,7 @@ def cov_sigma(
     Parameters
     ----------
 
-    cov: np.array, shape (n_stim, n_stim)
+    cov: NDArray or torch.Tensor, shape (n_stim, n_stim)
         Covariance matrix
 
     noise_var: float
@@ -40,7 +41,7 @@ def cov_sigma(
     Returns
     -------
 
-    cov_sigma: NDArray
+    cov_sigma: NDArray or torch.Tensor
         Modified covariance matrix that represents the variance of the
         predictive distribution of y
     """
@@ -52,7 +53,7 @@ def cov_sigma(
     return cov_sigma
 
 
-def _check_cov_normalized(cov, tolerance=1e-4):
+def check_cov_normalized(cov: NDArray | torch.Tensor, tolerance=1e-4) -> bool:
     """
     Check if the given covariance is trace normalized
     """
