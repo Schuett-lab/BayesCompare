@@ -1,18 +1,11 @@
 import torch
 import numpy as np
-import re
-from collections import OrderedDict
-from copy import deepcopy
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Optional, Union
 import warnings
 import torch
-from torchvision.models.feature_extraction import (
-    NodePathTracer,
-    DualGraphModule,
-    _warn_graph_differences,
-    _set_default_tracer_kwargs,
-)
-from torch import fx, nn
+from functools import partial
+import torchlens as tl
+import tqdm
 
 
 def check_act_dims(act, N):
@@ -49,12 +42,19 @@ def check_act_dims(act, N):
     return activations
 
 
-def get_cov(activations, N=None):
-    """computes the covariance matrix for a set of DNN activations
-
-    This is the first step for calculating differences between
-    predictive distributions, because random zero-mean weights will
-    reproduce the covariance of the activations.
+def get_cov(activations: Union[torch.Tensor, np.ndarray], N=None):
+    """
+    Computes the covariance matrix of the given activations.
+    Args:
+        activations (torch.Tensor or np.ndarray): The activations from which to compute the covariance matrix.
+            The first dimension is assumed to be the number of images unless N is provided.
+        N (Optional[int]): The number of images used for obtaining the covariance matrix. If provided,
+            the function checks that the first dimension of activations matches N. Then, if it does not match,
+            it reorders dimensions accordingly.
+    Returns:
+        cov_matrix (torch.Tensor or np.ndarray): The computed covariance matrix of the activations.
+    Raises:
+        NotImplementedError: If activations is neither a torch tensor nor a numpy array.
     """
     # check if the first dimension of activations is equal to the number of images used
     # if the number of images is provided as an input
@@ -76,175 +76,129 @@ def get_cov(activations, N=None):
     return module.matmul(x, x.T)
 
 
+def _compare_wanted_output(output_layers: List[str], wanted_layers: List[str]):
+    """
+    Compares the layers saved in the model history object with the
+    originally requested layers to ensure all wanted layers are included
+    and no additional layers are inserted.
+    Args:
+        output_layers (List[str]): List of layer names saved in the model history object.
+        wanted_layers (List[str]): List of originally requested layer names.
+    Returns:
+        (List[str]): Filtered list of layer names that are both in the output_layers and wanted_layers.
+    """
+    wanted_set = set(wanted_layers)
+    return [x for x in output_layers if x in wanted_set]
+
+
+def get_layer_names(model: torch.nn.Module, get_graph: Optional[str] = "none"):
+    """
+    Retrieves the names of all layers in a DNN model, visible to TorchLens under torch.inference_mode().
+
+    Args:
+        model (torch.nn.Module): The DNN model from which to extract layer names.
+        get_graph (Optional[str]): Visualization option for torchlens log_forward_pass.
+            Defaults to "none". Can be "unrolled" or "rolled" to visualize the model graph.
+    Returns:
+        all_layers (List[str]): A list of layer names in the model.
+    """
+
+    with torch.inference_mode():
+
+        mock_input = torch.rand(1, 3, 224, 224)
+
+        model_history = tl.log_forward_pass(
+            model,
+            mock_input,
+            layers_to_save=None,
+            vis_opt=get_graph,
+            detach_saved_tensors=True,
+        )
+
+        all_layers = list(model_history.layer_dict_main_keys.keys())
+
+        return all_layers
+
+
 def cov_extractor(
     model: torch.nn.Module,
-    return_nodes: Optional[Union[List[str], Dict[str, str]]] = None,
-    train_return_nodes: Optional[Union[List[str], Dict[str, str]]] = None,
-    eval_return_nodes: Optional[Union[List[str], Dict[str, str]]] = None,
-    tracer_kwargs: Optional[Dict[str, Any]] = None,
-    suppress_diff_warning: bool = False,
-    concrete_args: Optional[Dict[str, Any]] = None,
-) -> torch.fx.GraphModule:
+    layer_list: Union[List[str], str],
+    inputs: Union[torch.Tensor, np.ndarray],
+):
     """
-    Creates a minimal torch graph module that returns covariance matrices for the specified layers.
-    This function is a modified version of the torchvision.models.feature_extraction.create_feature_extractor
-    function, with the addition of covariance computation after the specified layers. It is used in the same
-    way as create_feature_extractor except for this function returns covariance matrices rather than activations.
-    For the documentation of create_feature_extractor, see: https://docs.pytorch.org/vision/stable/feature_extraction.html
+    Extracts covariance matrices from specified layers of a DNN model given input data.
+
+    Args:
+        model (torch.nn.Module): The DNN model from which to extract covariances.
+        layer_list (Union[List[str], str]): A list of layer names or a single layer name
+            for which to compute the covariance matrices.
+        inputs (Union[torch.Tensor, np.array]): An input tensor or array of images to
+            extract covariances from. First dimension is assumed to be the number of images.
+
+    Returns:
+        covs (dict): A dictionary where keys are layer names and values are the corresponding
+            covariance matrices.
+    Raises:
+        UserWarning: If a specified layer does not have a dimension matching the number of input images.
     """
 
-    tracer_kwargs = _set_default_tracer_kwargs(tracer_kwargs)
-    is_training = model.training
+    if type(layer_list) == str:
+        layer_list = [layer_list]
 
-    if all(
-        arg is None for arg in [return_nodes, train_return_nodes, eval_return_nodes]
-    ):
+    covs = {}
 
-        raise ValueError(
-            "Either `return_nodes` or `train_return_nodes` and `eval_return_nodes` together, should be specified"
+    N = inputs.shape[0]
+
+    get_cov_n = partial(get_cov, N=N)
+
+    model.eval()
+
+    with torch.inference_mode():
+
+        print("Covariance computation has started. This may take a while.")
+
+        model_history = tl.log_forward_pass(
+            model,
+            inputs,
+            layers_to_save=layer_list[0],
+            vis_opt="none",
+            activation_postfunc=get_cov_n,
+            detach_saved_tensors=True,
         )
 
-    if (train_return_nodes is None) ^ (eval_return_nodes is None):
-        raise ValueError(
-            "If any of `train_return_nodes` and `eval_return_nodes` are specified, then both should be specified"
-        )
+        covs[layer_list[0]] = model_history[layer_list[0]].tensor_contents
 
-    if not ((return_nodes is None) ^ (train_return_nodes is None)):
-        raise ValueError(
-            "If `train_return_nodes` and `eval_return_nodes` are specified, then both should be specified"
-        )
+        if len(layer_list) > 1:
 
-    # Put *_return_nodes into Dict[str, str] format
-    def to_strdict(n) -> Dict[str, str]:
-        if isinstance(n, list):
-            return {str(i): str(i) for i in n}
-        return {str(k): str(v) for k, v in n.items()}
-
-    if train_return_nodes is None:
-        return_nodes = to_strdict(return_nodes)
-        train_return_nodes = deepcopy(return_nodes)
-        eval_return_nodes = deepcopy(return_nodes)
-    else:
-        train_return_nodes = to_strdict(train_return_nodes)
-        eval_return_nodes = to_strdict(eval_return_nodes)
-
-    # Repeat the tracing and graph rewriting for train and eval mode
-    tracers = {}
-    graphs = {}
-    mode_return_nodes: Dict[str, Dict[str, str]] = {
-        "train": train_return_nodes,
-        "eval": eval_return_nodes,
-    }
-    for mode in ["train", "eval"]:
-        if mode == "train":
-            model.train()
-        elif mode == "eval":
-            model.eval()
-
-        # Instantiate our NodePathTracer and use that to trace the model
-        tracer = NodePathTracer(**tracer_kwargs)
-        graph = tracer.trace(model, concrete_args=concrete_args)
-
-        name = (
-            model.__class__.__name__ if isinstance(model, nn.Module) else model.__name__
-        )
-        graph_module = fx.GraphModule(tracer.root, graph, name)
-
-        # ---- my insertion
-        def _wrap_with_cov(graph_module: fx.GraphModule, tnode: fx.Node) -> fx.Node:
-            with graph_module.graph.inserting_after(tnode):
-                return graph_module.graph.call_function(get_cov, args=(tnode,))
-
-        # ---- end of my insertion
-
-        available_nodes = list(tracer.node_to_qualname.values())
-        # FIXME We don't know if we should expect this to happen
-        if len(set(available_nodes)) != len(available_nodes):
-            raise ValueError(
-                "There are duplicate nodes! Please raise an issue https://github.com/pytorch/vision/issues"
+            print(
+                "Model history object is created, now covariances for selected layers will be extracted."
             )
-        # Check that all outputs in return_nodes are present in the model
-        for query in mode_return_nodes[mode].keys():
-            # To check if a query is available we need to check that at least
-            # one of the available names starts with it up to a .
-            if not any(
-                [re.match(rf"^{query}(\.|$)", n) is not None for n in available_nodes]
-            ):
-                raise ValueError(
-                    f"node: '{query}' is not present in model. Hint: use "
-                    "`get_graph_node_names` to make sure the "
-                    "`return_nodes` you specified are present. It may even "
-                    "be that you need to specify `train_return_nodes` and "
-                    "`eval_return_nodes` separately."
+
+            model_history.save_new_activations(
+                model, inputs, layers_to_save=layer_list[1:]
+            )
+
+            if len(model_history.layers_with_saved_activations) != len(layer_list) - 1:
+
+                proper_saved_layers_list = _compare_wanted_output(
+                    model_history.layers_with_saved_activations, layer_list
                 )
 
-        # Remove existing output nodes (train mode)
-        orig_output_nodes = []
-        for n in reversed(graph_module.graph.nodes):
-            if n.op == "output":
-                orig_output_nodes.append(n)
-        if not orig_output_nodes:
-            raise ValueError("No output nodes found in graph_module.graph.nodes")
+                for layer in tqdm.tqdm(
+                    proper_saved_layers_list,
+                    initial=1,
+                    total=len(layer_list),
+                    desc="Requested Layer Activations",
+                ):
+                    covs[layer] = model_history[layer].tensor_contents
 
-        for n in orig_output_nodes:
-            graph_module.graph.erase_node(n)
+            else:
+                for layer in tqdm.tqdm(
+                    model_history.layers_with_saved_activations,
+                    initial=1,
+                    total=len(layer_list),
+                    desc="Requested Layer Activations",
+                ):
+                    covs[layer] = model_history[layer].tensor_contents
 
-        # Find nodes corresponding to return_nodes and make them into output_nodes
-        nodes = [n for n in graph_module.graph.nodes]
-        output_nodes = OrderedDict()
-
-        # iterate over a snapshot of keys since we pop inside the loop
-        pending_queries = list(mode_return_nodes[mode].keys())
-
-        for n in reversed(nodes):
-            module_qualname = tracer.node_to_qualname.get(n)
-            if module_qualname is None:
-                continue
-            for query in pending_queries:
-                depth = query.count(".")
-                if ".".join(module_qualname.split(".")[: depth + 1]) == query:
-
-                    # Insert cov node after the activation node and collect it
-                    cov_node = _wrap_with_cov(graph_module, n)
-                    output_nodes[mode_return_nodes[mode][query]] = cov_node
-
-                    # remove from both our snapshot and the dict
-                    pending_queries.remove(query)
-                    mode_return_nodes[mode].pop(query)
-
-                    break
-
-        # Keep ordering stable
-        output_nodes = OrderedDict(reversed(list(output_nodes.items())))
-
-        # Refresh the graph tail after all cov nodes were inserted,
-        # then append the output node at the real end of the graph
-        graph_module.graph.lint()
-
-        nodes_after = [n for n in graph_module.graph.nodes]
-        with graph_module.graph.inserting_after(nodes_after[-1]):
-            graph_module.graph.output(output_nodes)
-
-        graph_module.graph.lint()
-        graph_module.graph.eliminate_dead_code()
-        graph_module.recompile()
-
-        # Keep track of the tracer and graph, so we can choose the main one
-        tracers[mode] = tracer
-        graphs[mode] = graph
-
-    # Warn user if there are any discrepancies between the graphs of the
-    # train and eval modes
-    if not suppress_diff_warning:
-        _warn_graph_differences(tracers["train"], tracers["eval"])
-
-    # Build the final graph module
-    graph_module = DualGraphModule(
-        model, graphs["train"], graphs["eval"], class_name=name
-    )
-
-    # Restore original training mode
-    model.train(is_training)
-    graph_module.train(is_training)
-
-    return graph_module
+    return covs
