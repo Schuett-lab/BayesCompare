@@ -5,6 +5,8 @@ from .normals import jsd_normal_sig
 from .normals import jsd_normal_general
 from .normals import tvd_normal_sig
 from .normals import tvd_normal_general
+from .cov_utils import cov_sigma
+from .cov_utils import trace_norm
 from .inference import inference
 from .inference import evidence
 from .inference import inference_cov
