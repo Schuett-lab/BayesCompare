@@ -34,7 +34,8 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
 
         with h5py.File(hdf_filename, "w") as f:
 
-            init_mtx = np.empty((N, N)) * np.nan
+            init_mtx = np.empty((N, N))
+            init_mtx[:] = np.nan
 
             dist_dset = f.create_dataset("dist", shape=(N, N), data=init_mtx)
             indices = [(i, j) for j in range(N) for i in range(j + 1, N)]
