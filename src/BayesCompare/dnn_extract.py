@@ -14,7 +14,7 @@ def check_act_dims(act, N):
     This function verifies that the activation tensor contains a dimension equal to N, the
     number of images used for obtaining the covariance matrix. If N is not the first dimension, the
     tensor is permuted to move it to the first position. If N is not found in any dimension,
-    a warning is issued. If N is the first dimension the tensor itself is returned.
+    a warning is issued. If N is the first dimension, the tensor itself is returned.
     Args:
         act (torch.Tensor): Activation tensor whose dimensions need to be checked and potentially reordered.
         N (int): Number of images used for obtaining the covariance matrix. This dimension should exist in act.
@@ -36,7 +36,7 @@ def check_act_dims(act, N):
         activations = act.permute(perm)
 
     elif N not in shape:
-        warnings.warn("This layer does not have a number of images dimension")
+        warnings.warn("This layer does not have a number of images dimension.")
         return None
 
     return activations
@@ -133,8 +133,7 @@ def cov_extractor(
         layer_list (Union[List[str], str]): A list of layer names or a single layer name
             for which to compute the covariance matrices.
         inputs (Union[torch.Tensor, np.array]): An input tensor or array of images to
-            extract covariances from. First dimension is assumed to be the number of images.
-
+            extract covariances from. First dimension is expected to be the number of images.
     Returns:
         covs (dict): A dictionary where keys are layer names and values are the corresponding
             covariance matrices.
