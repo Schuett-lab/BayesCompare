@@ -34,14 +34,28 @@ def test_evidence_score_io():
         filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
         input_args[input_file] = read_sample_file(filename)
 
-    expected = np.load(os.path.join(sample_path, "test_output_loglik.npy"))
+    signal_var = input_args["input_totvar"] - input_args["input_epsvar"]
+    expected_multinoise = np.load(os.path.join(sample_path, "test_output_loglik.npy"))
+    expected_singlenoise = np.load(
+        os.path.join(sample_path, "test_output_loglik_singlenoise.npy")
+    )
 
-    score = loglik_score(
+    # Per-voxel noise
+    score_multinoise = loglik_score(
         norm_covs=input_args["input_covs_norm"],
         activations=input_args["input_y"],
-        total_var=input_args["input_totvar"],
-        eps_var=input_args["input_epsvar"],
+        signal_var=signal_var,
+        noise_var=input_args["input_epsvar"],
         n_jobs=None,
     )
 
-    assert_almost_equal(score, expected)
+    # Single noise value
+    score_singlenoise = loglik_score(
+        norm_covs=input_args["input_covs_norm"],
+        activations=input_args["input_y"],
+        noise_var=0.8,
+        n_jobs=None,
+    )
+
+    assert_almost_equal(score_multinoise, expected_multinoise)
+    assert_almost_equal(score_singlenoise, expected_singlenoise)

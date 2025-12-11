@@ -201,19 +201,31 @@ def loglik_score(
     else:
         single_noise_value = False
 
-    def voxel_loop(norm_covs, y, sig_var, eps_var):
+    def voxel_loop(norm_covs, y, sig_var, eps_var, cov_invs=None):
         """Run evidence on one voxel and all models"""
 
         model_score = []  # One voxel, all layers
-        for norm_cov in norm_covs:
-            s_cov = cov_sigma(norm_cov, signal_var=sig_var, noise_var=eps_var)
-            ev = evidence(s_cov, y)
+        for cov_idx, norm_cov in enumerate(norm_covs):
+            if cov_invs is not None:
+                ev = evidence(norm_cov, y, cov_inv=cov_invs[cov_idx])
+            else:
+                s_cov = cov_sigma(norm_cov, signal_var=sig_var, noise_var=eps_var)
+                ev = evidence(s_cov, y)
             model_score.append(ev.flatten())
 
         return np.concatenate(model_score)
 
     if single_noise_value:
-        ...
+        N = len(activations[0])
+        s_covs = [
+            cov_sigma(cov, signal_var=signal_var, noise_var=noise_var)
+            for cov in norm_covs
+        ]
+        cov_invs = [np.linalg.inv(cov[:N, :N]) for cov in s_covs]  # Precision matrix
+        model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
+            delayed(voxel_loop)(s_covs, y, signal_var, noise_var, cov_invs)
+            for y in tqdm(activations, total=activations.shape[0])
+        )
     else:
         model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
             delayed(voxel_loop)(norm_covs, y, sig_var, eps_var)
