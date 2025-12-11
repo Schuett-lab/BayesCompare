@@ -107,6 +107,10 @@ def get_layer_names(model: torch.nn.Module, get_graph: Optional[str] = "none"):
         all_layers (List[str]): A list of layer names in the model.
     """
 
+    # if model is not in eval mode, put it in eval mode
+    if model.training == True:
+        model.eval()
+
     with torch.inference_mode():
 
         mock_input = torch.rand(1, 3, 224, 224)
@@ -115,13 +119,13 @@ def get_layer_names(model: torch.nn.Module, get_graph: Optional[str] = "none"):
             model,
             mock_input,
             layers_to_save=None,
-            vis_opt=get_graph,
+            vis_opt="none",
             detach_saved_tensors=True,
         )
 
         all_layers = list(model_history.layer_dict_main_keys.keys())
 
-        return all_layers
+    return all_layers
 
 
 def cov_extractor(
@@ -154,7 +158,9 @@ def cov_extractor(
 
     get_cov_n = partial(get_cov, N=N)
 
-    model.eval()
+    # if model is not in eval mode, put it in eval mode
+    if model.training == True:
+        model.eval()
 
     with torch.inference_mode():
 
