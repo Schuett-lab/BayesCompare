@@ -33,7 +33,11 @@ def check_act_dims(act, N):
     elif N in shape:
         n_dim = shape.index(N)  # find which dimension equals n
         perm = [n_dim] + [i for i in range(len(shape)) if i != n_dim]
-        activations = act.permute(perm)
+
+        if isinstance(act, np.ndarray):
+            activations = act.transpose(perm)
+        elif isinstance(act, torch.Tensor):
+            activations = act.permute(perm)
 
     elif N not in shape:
         warnings.warn("This layer does not have a number of images dimension.")
