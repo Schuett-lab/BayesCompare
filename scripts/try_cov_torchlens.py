@@ -3,10 +3,13 @@ import PIL
 import torch
 import torchvision
 import BayesCompare as bc
-
+from pathlib import Path
 
 # Load the MS COCO dataset
-im_folder = "/home/sezan/Documents/BayesCompare/images/unlabeled2017"
+home_path = Path.home()
+im_folder = os.path.join(
+    home_path, "Documents/BayesCompare/images/unlabeled2017"
+)  # Put your path to COCO images here
 file_names = os.listdir(im_folder)
 
 # number of images to use for covariance computation
