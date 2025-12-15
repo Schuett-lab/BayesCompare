@@ -155,7 +155,7 @@ def evidence(
 
 
 def loglik_score(
-    norm_covs: list[NDArray],
+    norm_cov: list[NDArray],
     activations: NDArray,
     noise_var: NDArray | float,
     signal_var: Optional[NDArray] = None,
@@ -201,40 +201,34 @@ def loglik_score(
     else:
         single_noise_value = False
 
-    def voxel_loop(norm_covs, y, sig_var, eps_var, cov_invs=None):
+    def voxel_loop(norm_cov, y, sig_var, eps_var, cov_inv=None):
         """Run evidence on one voxel and all models"""
 
-        model_score = []  # One voxel, all layers
-        for cov_idx, norm_cov in enumerate(norm_covs):
-            if cov_invs is not None:
-                ev = evidence(norm_cov, y, cov_inv=cov_invs[cov_idx])
-            else:
-                s_cov = cov_sigma(norm_cov, signal_var=sig_var, noise_var=eps_var)
-                ev = evidence(s_cov, y)
-            model_score.append(ev.flatten())
+        if cov_inv is not None:
+            ev = evidence(norm_cov, y, cov_inv=cov_inv)
+        else:
+            s_cov = cov_sigma(norm_cov, signal_var=sig_var, noise_var=eps_var)
+            ev = evidence(s_cov, y)
 
-        return np.concatenate(model_score)
+        return ev.flatten()
 
     if single_noise_value:
         N = len(activations[0])
-        s_covs = [
-            cov_sigma(cov, signal_var=signal_var, noise_var=noise_var)
-            for cov in norm_covs
-        ]
-        cov_invs = [np.linalg.inv(cov[:N, :N]) for cov in s_covs]  # Precision matrix
+        s_cov = cov_sigma(norm_cov, signal_var=signal_var, noise_var=noise_var)
+        cov_inv = np.linalg.inv(s_cov[:N, :N])
         model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
-            delayed(voxel_loop)(s_covs, y, signal_var, noise_var, cov_invs)
+            delayed(voxel_loop)(s_cov, y, signal_var, noise_var, cov_inv)
             for y in tqdm(activations, total=activations.shape[0])
         )
     else:
         model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
-            delayed(voxel_loop)(norm_covs, y, sig_var, eps_var)
+            delayed(voxel_loop)(norm_cov, y, sig_var, eps_var)
             for y, sig_var, eps_var in tqdm(
                 zip(activations, signal_var, noise_var), total=activations.shape[0]
             )
         )  # All voxels, all layers
 
-    loglik_score = np.stack(model_scores)
+    loglik_score = np.concatenate(model_scores)
 
     return loglik_score
 

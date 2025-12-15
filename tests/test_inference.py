@@ -41,21 +41,29 @@ def test_evidence_score_io():
     )
 
     # Per-voxel noise
-    score_multinoise = loglik_score(
-        norm_covs=input_args["input_covs_norm"],
-        activations=input_args["input_y"],
-        signal_var=signal_var,
-        noise_var=input_args["input_epsvar"],
-        n_jobs=None,
-    )
+    model_scores = []
+    for cov in input_args["input_covs_norm"]:
+        model_score = loglik_score(
+            norm_cov=cov,
+            activations=input_args["input_y"],
+            signal_var=signal_var,
+            noise_var=input_args["input_epsvar"],
+            n_jobs=None,
+        )
+        model_scores.append(model_score)
+    score_multinoise = np.stack(model_scores, axis=1)
 
     # Single noise value
-    score_singlenoise = loglik_score(
-        norm_covs=input_args["input_covs_norm"],
-        activations=input_args["input_y"],
-        noise_var=0.8,
-        n_jobs=None,
-    )
+    model_scores = []
+    for cov in input_args["input_covs_norm"]:
+        model_score = loglik_score(
+            norm_cov=cov,
+            activations=input_args["input_y"],
+            noise_var=0.8,
+            n_jobs=None,
+        )
+        model_scores.append(model_score)
+    score_singlenoise = np.stack(model_scores, axis=1)
 
     assert_almost_equal(score_multinoise, expected_multinoise)
     assert_almost_equal(score_singlenoise, expected_singlenoise)
