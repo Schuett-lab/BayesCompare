@@ -8,7 +8,7 @@ import torchlens as tl
 import tqdm
 
 
-def check_act_dims(act, N):
+def check_act_dims(act, N, module_name):
     """
     Checks and reshapes activation tensor dimensions to ensure N is the first dimension.
     This function verifies that the activation tensor contains a dimension equal to N, the
@@ -16,8 +16,9 @@ def check_act_dims(act, N):
     tensor is permuted to move it to the first position. If N is not found in any dimension,
     a warning is issued. If N is the first dimension, the tensor itself is returned.
     Args:
-        act (torch.Tensor): Activation tensor whose dimensions need to be checked and potentially reordered.
+        act (torch.Tensor or np.ndarray): Activation tensor whose dimensions need to be checked and potentially reordered.
         N (int): Number of images used for obtaining the covariance matrix. This dimension should exist in act.
+        module_name (str): Indicator of the activation type. It is either 'torch' or 'numpy'
     Returns:
         activations (torch.Tensor or None): The activation tensor with N as the first dimension, or None if N is not found
         in any dimension of the input tensor.
@@ -34,9 +35,9 @@ def check_act_dims(act, N):
         n_dim = shape.index(N)  # find which dimension equals n
         perm = [n_dim] + [i for i in range(len(shape)) if i != n_dim]
 
-        if isinstance(act, np.ndarray):
+        if module_name == "numpy":
             activations = act.transpose(perm)
-        elif isinstance(act, torch.Tensor):
+        elif module_name == "torch":
             activations = act.permute(perm)
 
     elif N not in shape:
@@ -60,20 +61,22 @@ def get_cov(activations: Union[torch.Tensor, np.ndarray], N=None):
     Raises:
         NotImplementedError: If activations is neither a torch tensor nor a numpy array.
     """
-    # check if the first dimension of activations is equal to the number of images used
-    # if the number of images is provided as an input
-    if N != None:
-        activations = check_act_dims(activations, N)
-
     if torch.is_tensor(activations):
         module = torch
+        module_name = "torch"
         # x = activations.detach().clone() # we dont want the covs to be detached from the graph because we would like to use them for training
     elif isinstance(activations, np.ndarray):
         module = np
+        module_name = "numpy"
     else:  # Also we can catch bad arguments (not mandatory)
         raise NotImplementedError(
             "Activations must be either a torch tensor or a numpy array."
         )
+
+    # check if the first dimension of activations is equal to the number of images used
+    # if the number of images is provided as an input
+    if N != None:
+        activations = check_act_dims(activations, N, module_name)
 
     act = module.reshape(activations, [activations.shape[0], -1])
     x = act - module.mean(act, 1, keepdims=True)
