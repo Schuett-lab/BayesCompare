@@ -5,7 +5,7 @@ import tqdm
 import torch
 import functools
 
-from .cov_utils import trace_norm, cov_sigma
+from .cov_utils import check_cov_normalized, cov_trace_norm_sigma_N
 
 ## Metrics
 
@@ -77,12 +77,11 @@ def mahalanobis(
     sigma1, sigma2, mu1=None, mu2=None
 ):  # not the true mahalanobis definition
 
-    # these conditions do not check for one mean is non zero and other is zero !!!
-    if mu1 is not None and mu2 is not None:
+    if mu1 is None and mu2 is None:
+        d = np.array(0)
+    else:
         delta_mu = np.subtract(mu1, mu2)
         d = np.inner(delta_mu, np.matmul((np.linalg.inv(sigma1 + sigma2)), delta_mu))
-    else:
-        d = np.array(0)
 
     return d
 
@@ -424,6 +423,12 @@ def measure_dist(covs, mean=None, meas_name="TVD", alpha=None, b=1 / 100):
     if alpha == None:
         alpha = N * b / (1 + (N * b))
 
+    idx = np.random.randint(len(covs))
+    normalized = check_cov_normalized(covs[idx])
+
+    if not normalized:
+        covs = cov_trace_norm_sigma_N(covs, noise_var=alpha)
+
     measure = select_measure(covs[0], meas_name)
 
     dist = np.zeros((N, N))
@@ -432,21 +437,17 @@ def measure_dist(covs, mean=None, meas_name="TVD", alpha=None, b=1 / 100):
 
     for i, ci in enumerate(covs):
 
-        sig1 = cov_sigma(trace_norm(ci), noise_var=alpha)
-
         for j, cj in enumerate(covs):
 
             if j > i:
 
-                sig2 = cov_sigma(trace_norm(cj), noise_var=alpha)
-
                 if measure == jsd or measure == tvd:
                     dist[i, j] = measure(
-                        sig1, sig2, N=10000
+                        ci, cj, N=10000
                     )  # not using mean, for a generalized code mean should be provided
                 else:
                     dist[i, j] = measure(
-                        sig1, sig2
+                        ci, cj
                     )  # not using mean, for a generalized code mean should be provided
 
                 dist[j, i] = dist[i, j]
@@ -478,9 +479,12 @@ def select_measure(cov_mtx, meas_name):
         elif meas_name == "bhattacharyya":
             measure = bhattacharyya
 
+        elif meas_name == "mahalanobis":
+            measure = mahalanobis
+
         else:
             raise NotImplementedError(
-                "Given metric name is not valid Numpy covariances."
+                "Given metric name is not valid for Numpy covariances."
             )
 
     elif isinstance(cov_mtx, torch.Tensor):
