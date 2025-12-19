@@ -53,6 +53,40 @@ def cov_sigma(
     return cov_sigma
 
 
+def cov_sigma_N(
+    covs: torch.Tensor, noise_var: float, signal_var: float | None = None
+) -> torch.Tensor:
+
+    if not signal_var:
+        signal_var = 1 - noise_var
+
+    cov_sigma = signal_var * covs + (noise_var * torch.eye(covs.shape[-1])[None, ...])
+
+    return cov_sigma
+
+
+def trace_norm_N(covs: torch.Tensor) -> torch.Tensor:
+
+    cov_norm = (
+        covs
+        * covs.shape[-1]
+        / covs.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)[:, None, None]
+    )
+
+    return cov_norm
+
+
+def cov_trace_norm_sigma_N(
+    covs: torch.Tensor, noise_var: float, signal_var: float | None = None
+) -> torch.Tensor:
+
+    normed_covs = cov_sigma_N(
+        trace_norm_N(covs), noise_var=noise_var, signal_var=signal_var
+    )
+
+    return normed_covs
+
+
 def check_cov_normalized(cov: NDArray | torch.Tensor, tolerance=1e-4) -> bool:
     """
     Check if the given covariance is trace normalized
