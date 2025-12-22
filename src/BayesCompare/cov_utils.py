@@ -12,7 +12,9 @@ from numpy.typing import NDArray
 def trace_norm(cov: NDArray | torch.Tensor) -> NDArray | torch.Tensor:
     """Normalize the covariance to have trace equal to its shape"""
 
-    cov_norm = cov * cov.shape[0] / np.trace(cov)
+    module = check_input_format(cov)
+
+    cov_norm = cov * cov.shape[0] / module.trace(cov)
 
     return cov_norm
 
@@ -48,7 +50,9 @@ def cov_sigma(
     if not signal_var:
         signal_var = 1 - noise_var
 
-    cov_sigma = signal_var * cov + noise_var * np.eye(cov.shape[0])
+    module = check_input_format(cov)
+
+    cov_sigma = signal_var * cov + noise_var * module.eye(cov.shape[0])
 
     return cov_sigma
 
@@ -60,18 +64,21 @@ def cov_sigma_N(
     if not signal_var:
         signal_var = 1 - noise_var
 
-    cov_sigma = signal_var * covs + (noise_var * torch.eye(covs.shape[-1])[None, ...])
+    module = check_input_format(covs)
+
+    cov_sigma = signal_var * covs + (noise_var * module.eye(covs.shape[-1])[None, ...])
 
     return cov_sigma
 
 
 def trace_norm_N(covs: torch.Tensor) -> torch.Tensor:
 
-    cov_norm = (
-        covs
-        * covs.shape[-1]
-        / covs.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)[:, None, None]
-    )
+    if check_input_format(covs) == np:
+        denominator = covs.diagonal(offset=0, axis1=-1, axis2=-2).sum(-1)[:, None, None]
+    elif check_input_format(covs) == torch:
+        denominator = covs.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)[:, None, None]
+
+    cov_norm = covs * covs.shape[-1] / denominator
 
     return cov_norm
 
@@ -95,3 +102,14 @@ def check_cov_normalized(cov: NDArray | torch.Tensor, tolerance=1e-4) -> bool:
     trace_cov = cov.trace()
 
     return abs(trace_cov - len(cov)) < tolerance
+
+
+def check_input_format(input):
+
+    if isinstance(input, torch.Tensor):
+        module = torch
+
+    if isinstance(input, np.ndarray):
+        module = np
+
+    return module
