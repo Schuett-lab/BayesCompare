@@ -4,8 +4,14 @@ from scipy.linalg.blas import dtrmm as mm
 import tqdm
 import torch
 import functools
-
-from .cov_utils import check_cov_normalized, cov_trace_norm_sigma_N
+from typing import Sequence, Union, Optional
+from .cov_utils import (
+    check_cov_normalized,
+    cov_trace_norm_sigma_N,
+    check_cov_symmetry,
+    check_and_change_input_format,
+    check_input_format,
+)
 
 ## Metrics
 
@@ -375,7 +381,13 @@ def bhattacharyya(sigma1, sigma2, mu1=None, mu2=None):
 
 
 ## no check points, no parallelization, single measure only and torch compatable (after correcting select measure for torch comp measures too)
-def measure_dist(covs, mean=None, meas_name="TVD", alpha=None, b=1 / 100):
+def measure_dist(
+    covs: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
+    mean: Optional[Union[Sequence[int], np.ndarray, torch.Tensor]] = None,
+    meas_name: str = "TVD",
+    alpha: Optional[float] = None,
+    b: float = 1 / 100,
+):
     """
     Compute a symmetric pairwise distance matrix from the list of covariances.
 
@@ -406,7 +418,7 @@ def measure_dist(covs, mean=None, meas_name="TVD", alpha=None, b=1 / 100):
 
     Returns
     -------
-    dist : numpy.ndarray
+    dist : numpy.ndarray or torch.Tensor
         A symmetric 2-D array of shape (N, N) containing pairwise distances
         between trace-normalized covariance inputs. The diagonal elements are zero.
         Only the upper triangle (j > i) is computed explicitly and mirrored to the
@@ -418,7 +430,7 @@ def measure_dist(covs, mean=None, meas_name="TVD", alpha=None, b=1 / 100):
     >>> dist_matrix = measure_dist(cov_list, meas_name="TVD")
     """
 
-    N = len(covs)
+    covs, N, module = check_and_change_input_format(covs)
 
     if alpha == None:
         alpha = N * b / (1 + (N * b))
@@ -429,9 +441,17 @@ def measure_dist(covs, mean=None, meas_name="TVD", alpha=None, b=1 / 100):
     if not normalized:
         covs = cov_trace_norm_sigma_N(covs, noise_var=alpha)
 
-    measure = select_measure(covs[0], meas_name)
+    # is it okay to check the symmetry of only one randomly chosen matrix or should I check all matrices in covs?
+    symmetric = check_cov_symmetry(covs[idx])
 
-    dist = np.zeros((N, N))
+    if not symmetric:
+        raise ValueError(
+            f"Covariance matrices should be symmetric! The covariance matrix at index {idx} violates this condition."
+        )
+
+    measure = select_measure(covs[0], meas_name, module=module)
+
+    dist = module.zeros((N, N))
 
     progress_bar = tqdm.tqdm(total=int((N * (N - 1)) / 2))
 
@@ -457,9 +477,12 @@ def measure_dist(covs, mean=None, meas_name="TVD", alpha=None, b=1 / 100):
     return dist
 
 
-def select_measure(cov_mtx, meas_name):
+def select_measure(cov_mtx, meas_name, module=None):
 
-    if isinstance(cov_mtx, np.ndarray):
+    if module == None:
+        module = check_input_format(cov_mtx)
+
+    if module == np:
 
         if meas_name == "wasserstein":
             measure = wasserstein
@@ -484,10 +507,10 @@ def select_measure(cov_mtx, meas_name):
 
         else:
             raise NotImplementedError(
-                "Given metric name is not valid for Numpy covariances."
+                "Given metric name is not valid for Numpy array covariances."
             )
 
-    elif isinstance(cov_mtx, torch.Tensor):
+    elif module == torch:
 
         if meas_name == "wasserstein":
             measure = wasserstein_torch_comp
@@ -508,7 +531,7 @@ def select_measure(cov_mtx, meas_name):
 
         else:
             raise NotImplementedError(
-                "Given metric name is not valid for Tensor covariances."
+                "Given metric name is not valid for Tensor tensor covariances."
             )
 
     else:
