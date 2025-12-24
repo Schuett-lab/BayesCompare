@@ -8,27 +8,31 @@ from numpy.testing import assert_almost_equal
 from torch.testing import assert_close
 
 
-def read_input(dir):
+def read_input():
 
-    file_ext = pathlib.Path(dir).suffix
-
-    if file_ext == ".npy":
-        sample_file = np.load(dir)
-    elif file_ext == ".pt":
-        sample_file = torch.load(dir)
-    else:
-        return NotImplementedError("Input file type not implemented for loading")
-
-    return sample_file
-
-
-def test_trace_norm():
-    sample_path = "tests/sample_data"
+    home_path = pathlib.Path.home()
+    sample_path = os.path.join(home_path, "Documents/BayesCompare/tests/sample_data")
     input_args = {}
     for input_file in ["utils_covs_np", "utils_covs_th"]:
         print(os.getcwd(), os.path.join(sample_path, f"test_{input_file}*"))
         filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
-        input_args[input_file] = read_input(filename)
+        file_ext = pathlib.Path(filename).suffix
+
+        if file_ext == ".npy":
+            sample_file = np.load(filename)
+        elif file_ext == ".pt":
+            sample_file = torch.load(filename)
+        else:
+            return NotImplementedError("Input file type not implemented for loading")
+
+        input_args[input_file] = sample_file
+
+    return input_args
+
+
+def test_trace_norm():
+
+    input_args = read_input()
 
     single_output_np = []
     single_output_th = []
@@ -55,12 +59,8 @@ def test_trace_norm():
 
 
 def test_cov_sigmas():
-    sample_path = "tests/sample_data"
-    input_args = {}
-    for input_file in ["utils_covs_np", "utils_covs_th"]:
-        print(os.getcwd(), os.path.join(sample_path, f"test_{input_file}*"))
-        filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
-        input_args[input_file] = read_input(filename)
+
+    input_args = read_input()
 
     noise_var = 0.3
     signal_var = 0.1
@@ -90,12 +90,8 @@ def test_cov_sigmas():
 
 
 def test_cov_trace_norm_sigma_N():
-    sample_path = "tests/sample_data"
-    input_args = {}
-    for input_file in ["utils_covs_np", "utils_covs_th"]:
-        print(os.getcwd(), os.path.join(sample_path, f"test_{input_file}*"))
-        filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
-        input_args[input_file] = read_input(filename)
+
+    input_args = read_input()
 
     noise_var = 0.1
     single_output_np = []
