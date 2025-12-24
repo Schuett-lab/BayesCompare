@@ -104,12 +104,93 @@ def check_cov_normalized(cov: NDArray | torch.Tensor, tolerance=1e-4) -> bool:
     return abs(trace_cov - len(cov)) < tolerance
 
 
+def check_cov_symmetry(cov_mtx, rtol=1e-05, atol=1e-08):
+
+    module = check_input_format(cov_mtx)
+    return module.allclose(cov_mtx, cov_mtx.T, rtol=rtol, atol=atol)
+
+
 def check_input_format(input):
+    """
+    Determines the appropriate numerical library module for the input data type.
 
+    Parameters
+    ----------
+    input : torch.Tensor or np.ndarray
+        The input data to check.
+
+    Returns
+    -------
+    module : type
+        torch if input is a torch.Tensor, np if input is a np.ndarray.
+    """
     if isinstance(input, torch.Tensor):
-        module = torch
+        return torch
+    elif isinstance(input, np.ndarray):
+        return np
+    raise TypeError("Input must be a Numpy array of a PyTorch tensor.")
 
-    if isinstance(input, np.ndarray):
-        module = np
 
-    return module
+def check_and_change_input_format(input):
+    """
+    Normalize matrix input into an iterable of square matrices.
+
+    Accepts either a list/tuple of square matrices with shape ``(dim, dim)``,
+    or a NumPy array / PyTorch tensor with shape ``(N, dim, dim)``. A single
+    square matrix with shape ``(dim, dim)`` is treated as ``N = 1``.
+
+    Parameters
+    ----------
+    input : list of ndarray or list of torch.Tensor or ndarray or torch.Tensor
+        Input matrices in one of the supported formats.
+
+    Returns
+    -------
+    modified_input : iterable
+        Iterable yielding ``N`` matrices of shape ``(dim, dim)``.
+
+    N : int
+        Number of matrices.
+
+    module:type
+        torch if input is a torch.Tensor, np if input is a np.ndarray or the respective type if a list of either of these types.
+
+    Raises
+    ------
+    ValueError
+        If the input is empty or contains non-square matrices.
+
+    TypeError
+        If the input type or dimensionality is unsupported.
+    """
+
+    if isinstance(input, (list, tuple)):
+        if len(input) == 0:
+            raise ValueError("Input list is empty.")
+        module = check_input_format(input[0])
+        return input, len(input), module
+
+    if hasattr(input, "ndim"):
+        if input.ndim == 2:
+            d1, d2 = input.shape
+            if d1 != d2:
+                raise ValueError(
+                    f"Expected square matrix (dim, dim), got {input.shape}"
+                )
+            module = check_input_format(input)
+            return (input,), 1, module
+
+        if input.ndim == 3:
+            N, d1, d2 = input.shape
+            if d1 != d2:
+                raise ValueError(
+                    f"Expected shape (N, dim, dim), but got {input.shape}: "
+                    "last two dimensions must be equal."
+                )
+            module = check_input_format(input)
+            return (input[i] for i in range(N)), N, module
+
+    raise TypeError(
+        "Input must be a list of (dim, dim) matrices "
+        "or an array/tensor of shape (N, dim, dim)."
+    )
