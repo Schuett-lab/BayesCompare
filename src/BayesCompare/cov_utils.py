@@ -6,6 +6,7 @@ Authors: Juan Jesús Torre Tresols, Sezan Oral, Heiko Schütt
 import torch
 import numpy as np
 
+from typing import Sequence, Union, Optional
 from numpy.typing import NDArray
 
 
@@ -58,40 +59,67 @@ def cov_sigma(
 
 
 def cov_sigma_N(
-    covs: torch.Tensor, noise_var: float, signal_var: float | None = None
-) -> torch.Tensor:
+    covs: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
+    noise_var: float,
+    signal_var: Optional[float] = None,
+) -> Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]:
 
     if not signal_var:
         signal_var = 1 - noise_var
 
-    module = check_input_format(covs)
+    if isinstance(covs, (list, tuple)):
+        cov_sigma_out = []
+        for cov in covs:
+            cov_sigma_out.append(
+                cov_sigma(cov, noise_var=noise_var, signal_var=signal_var)
+            )
 
-    cov_sigma = signal_var * covs + (noise_var * module.eye(covs.shape[-1])[None, ...])
+    else:
+        module = check_input_format(covs)
 
-    return cov_sigma
+        cov_sigma_out = signal_var * covs + (
+            noise_var * module.eye(covs.shape[-1])[None, ...]
+        )
+
+    return cov_sigma_out
 
 
-def trace_norm_N(covs: torch.Tensor) -> torch.Tensor:
+def trace_norm_N(
+    covs: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
+) -> Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]:
 
-    if check_input_format(covs) == np:
-        denominator = covs.diagonal(offset=0, axis1=-1, axis2=-2).sum(-1)[:, None, None]
-    elif check_input_format(covs) == torch:
-        denominator = covs.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)[:, None, None]
+    if isinstance(covs, (list, tuple)):
+        cov_norm = []
+        for cov in covs:
+            cov_norm.append(trace_norm(cov))
+    else:
+        module = check_input_format(covs)
 
-    cov_norm = covs * covs.shape[-1] / denominator
+        if module == np:
+            denominator = covs.diagonal(offset=0, axis1=-1, axis2=-2).sum(-1)[
+                :, None, None
+            ]
+        elif module == torch:
+            denominator = covs.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)[
+                :, None, None
+            ]
+
+        cov_norm = covs * covs.shape[-1] / denominator
 
     return cov_norm
 
 
 def cov_trace_norm_sigma_N(
-    covs: torch.Tensor, noise_var: float, signal_var: float | None = None
+    covs: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
+    noise_var: float,
+    signal_var: Optional[float] = None,
 ) -> torch.Tensor:
 
-    normed_covs = cov_sigma_N(
+    normed_sigma_covs = cov_sigma_N(
         trace_norm_N(covs), noise_var=noise_var, signal_var=signal_var
     )
 
-    return normed_covs
+    return normed_sigma_covs
 
 
 def check_cov_normalized(cov: NDArray | torch.Tensor, tolerance=1e-4) -> bool:
@@ -128,26 +156,27 @@ def check_input_format(input):
         return torch
     elif isinstance(input, np.ndarray):
         return np
-    raise TypeError("Input must be a Numpy array of a PyTorch tensor.")
+    raise TypeError("Input must be a Numpy array or a PyTorch tensor.")
 
 
-def check_and_change_input_format(input):
+def check_and_change_input_format(
+    input: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
+):
     """
-    Normalize matrix input into an iterable of square matrices.
+    Changes given input matrix or tuple/list of matrices into a list of matrices.
 
     Accepts either a list/tuple of square matrices with shape ``(dim, dim)``,
-    or a NumPy array / PyTorch tensor with shape ``(N, dim, dim)``. A single
-    square matrix with shape ``(dim, dim)`` is treated as ``N = 1``.
+    or a NumPy array / PyTorch tensor with shape ``(N, dim, dim)``.
 
     Parameters
     ----------
-    input : list of ndarray or list of torch.Tensor or ndarray or torch.Tensor
+    input : list/tuple of np.ndarray or list of torch.Tensor or np.ndarray or torch.Tensor
         Input matrices in one of the supported formats.
 
     Returns
     -------
     modified_input : iterable
-        Iterable yielding ``N`` matrices of shape ``(dim, dim)``.
+        Iterable yielding a list of length ``N``, consisting of matrices of shape ``(dim, dim)``.
 
     N : int
         Number of matrices.
@@ -158,7 +187,8 @@ def check_and_change_input_format(input):
     Raises
     ------
     ValueError
-        If the input is empty or contains non-square matrices.
+        If the input is empty or contains only one square matrix.
+        If the input is contains non-square matrices.
 
     TypeError
         If the input type or dimensionality is unsupported.
@@ -167,30 +197,27 @@ def check_and_change_input_format(input):
     if isinstance(input, (list, tuple)):
         if len(input) == 0:
             raise ValueError("Input list is empty.")
+        elif len(input) == 1:
+            raise ValueError("Covariance list has to have more than 1 matrix.")
         module = check_input_format(input[0])
-        return input, len(input), module
+        return list(input), len(input), module
 
-    if hasattr(input, "ndim"):
+    elif hasattr(input, "ndim"):
         if input.ndim == 2:
-            d1, d2 = input.shape
-            if d1 != d2:
-                raise ValueError(
-                    f"Expected square matrix (dim, dim), got {input.shape}"
-                )
-            module = check_input_format(input)
-            return (input,), 1, module
-
-        if input.ndim == 3:
+            raise ValueError("Covariance tensor has to have more than 1 matrix.")
+        elif input.ndim == 3:
             N, d1, d2 = input.shape
+            if N == 1:
+                raise ValueError("Covariance tensor has to have more than 1 matrix.")
             if d1 != d2:
                 raise ValueError(
                     f"Expected shape (N, dim, dim), but got {input.shape}: "
                     "last two dimensions must be equal."
                 )
             module = check_input_format(input)
-            return (input[i] for i in range(N)), N, module
+            return [input[i] for i in range(N)], N, module
 
     raise TypeError(
-        "Input must be a list of (dim, dim) matrices "
-        "or an array/tensor of shape (N, dim, dim)."
+        "Input must be a tuple/list of (dim, dim) matrices "
+        "or an array/tensor of shape (N, dim, dim) with N>1."
     )
