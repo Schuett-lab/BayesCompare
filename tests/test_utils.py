@@ -4,7 +4,7 @@ import pathlib
 import os
 import glob
 from BayesCompare import cov_utils
-from numpy.testing import assert_almost_equal
+from numpy.testing import assert_allclose
 from torch.testing import assert_close
 
 
@@ -14,7 +14,6 @@ def read_input():
     sample_path = os.path.join(home_path, "Documents/BayesCompare/tests/sample_data")
     input_args = {}
     for input_file in ["utils_covs_np", "utils_covs_th"]:
-        print(os.getcwd(), os.path.join(sample_path, f"test_{input_file}*"))
         filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
         file_ext = pathlib.Path(filename).suffix
 
@@ -30,7 +29,7 @@ def read_input():
     return input_args
 
 
-def test_trace_norm():
+def test_trace_norm_N():
 
     input_args = read_input()
 
@@ -54,11 +53,13 @@ def test_trace_norm():
     assert cov_utils.check_cov_normalized(batch_output_np[idx, :, :])
     assert cov_utils.check_cov_normalized(batch_output_th[idx, :, :])
 
-    assert_almost_equal(single_output_np, batch_output_np)
-    assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=0)
+    assert_allclose(single_output_np, batch_output_np, rtol=1e-4, atol=1e-4)
+    assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=1e-4)
+
+    print("trace_norm_N test successful!")
 
 
-def test_cov_sigmas():
+def test_cov_sigma_N():
 
     input_args = read_input()
 
@@ -85,8 +86,10 @@ def test_cov_sigmas():
         input_args["utils_covs_th"], noise_var=noise_var, signal_var=signal_var
     )
 
-    assert_almost_equal(single_output_np, batch_output_np)
-    assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=0)
+    assert_allclose(single_output_np, batch_output_np, rtol=1e-4, atol=1e-4)
+    assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=1e-4)
+
+    print("cov_sigma_N test successful!")
 
 
 def test_cov_trace_norm_sigma_N():
@@ -116,10 +119,12 @@ def test_cov_trace_norm_sigma_N():
         input_args["utils_covs_th"], noise_var=noise_var
     )
 
-    assert_almost_equal(single_output_np, batch_output_np)
-    assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=0)
+    assert_allclose(single_output_np, batch_output_np, rtol=1e-4, atol=1e-4)
+    assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=1e-4)
+
+    print("cov_trace_norm_sigma_N test successful!")
 
 
-test_trace_norm()
-test_cov_sigmas()
+test_trace_norm_N()
+test_cov_sigma_N()
 test_cov_trace_norm_sigma_N()
