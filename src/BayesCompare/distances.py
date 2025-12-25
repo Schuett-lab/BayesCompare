@@ -132,7 +132,7 @@ if torch.cuda.is_available():
     gen_torch_cpu = torch.Generator(device="cpu").manual_seed(42)
 
 
-def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
+def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
 
     if mu1 is None and mu2 is None:
         k = sigma1.shape[0]
@@ -141,9 +141,9 @@ def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
         logdet1 = np.sum(np.log(np.diag(A1)))
         logdet2 = np.sum(np.log(np.diag(A2)))
         # generate random samples from each distribution
-        x10 = gen.standard_normal(size=(k, N))
+        x10 = gen.standard_normal(size=(k, num_samples))
         x1 = mm(1, A1, x10, lower=1)
-        x20 = gen.standard_normal(size=(k, N))
+        x20 = gen.standard_normal(size=(k, num_samples))
         x2 = mm(1, A2, x20, lower=1)
         # compute densities for each
         p1 = -np.sum(x10**2, 0) / 2 - logdet1
@@ -168,8 +168,8 @@ def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
         Ainv1 = scipy.linalg.solve_triangular(A1, np.eye(k), lower=True)
         Ainv2 = scipy.linalg.solve_triangular(A2, np.eye(k), lower=True)
         # generate random samples from each distribution
-        x1 = np.expand_dims(mu1, 1) + A1 @ gen.standard_normal(size=(k, N))
-        x2 = np.expand_dims(mu2, 1) + A2 @ gen.standard_normal(size=(k, N))
+        x1 = np.expand_dims(mu1, 1) + A1 @ gen.standard_normal(size=(k, num_samples))
+        x2 = np.expand_dims(mu2, 1) + A2 @ gen.standard_normal(size=(k, num_samples))
         # compute densities for each
         # removed factor 2 from these as it cancels
         logdet1 = np.sum(np.log(np.diag(A1)))
@@ -192,7 +192,7 @@ def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
     return max(0, jsd)
 
 
-def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
+def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
 
     if type(sigma1) != torch.Tensor:
         sigma1 = torch.tensor(sigma1)
@@ -207,9 +207,9 @@ def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
         logdet1 = torch.sum(torch.log(torch.diag(A1)))
         logdet2 = torch.sum(torch.log(torch.diag(A2)))
         # generate random samples from each distribution
-        x10 = torch.randn((k, N), generator=gen)
+        x10 = torch.randn((k, num_samples), generator=gen)
         x1 = torch.Tensor(mm(1, A1, x10, lower=1))
-        x20 = torch.randn((k, N), generator=gen)
+        x20 = torch.randn((k, num_samples), generator=gen)
         x2 = torch.Tensor(mm(1, A2, x20, lower=1))
         # compute densities for each
         p1 = -torch.sum(x10**2, 0) / 2 - logdet1
@@ -234,8 +234,12 @@ def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
         Ainv1 = torch.linalg.solve_triangular(A1, torch.eye(k), lower=True)
         Ainv2 = torch.linalg.solve_triangular(A2, torch.eye(k), lower=True)
         # generate random samples from each distribution
-        x1 = torch.Tensor.expand(mu1, 1) + A1 @ torch.randn((k, N), generator=gen)
-        x2 = torch.Tensor.expand(mu2, 1) + A2 @ torch.randn((k, N), generator=gen)
+        x1 = torch.Tensor.expand(mu1, 1) + A1 @ torch.randn(
+            (k, num_samples), generator=gen
+        )
+        x2 = torch.Tensor.expand(mu2, 1) + A2 @ torch.randn(
+            (k, num_samples), generator=gen
+        )
         # compute densities for each
         # removed factor 2 from these as it cancels
         logdet1 = torch.sum(torch.log(torch.diag(A1)))
@@ -258,7 +262,7 @@ def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
     return max(0, jsd)
 
 
-def _tvd_numpy(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
+def _tvd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
 
     if mu1 is not None and mu2 is not None:
         k = len(mu1)
@@ -267,8 +271,8 @@ def _tvd_numpy(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
         Ainv1 = scipy.linalg.solve_triangular(A1, np.eye(k), lower=True)
         Ainv2 = scipy.linalg.solve_triangular(A2, np.eye(k), lower=True)
         # generate random samples from each distribution
-        x1 = np.expand_dims(mu1, 1) + A1 @ gen.standard_normal(size=(k, N))
-        x2 = np.expand_dims(mu2, 1) + A2 @ gen.standard_normal(size=(k, N))
+        x1 = np.expand_dims(mu1, 1) + A1 @ gen.standard_normal(size=(k, num_samples))
+        x2 = np.expand_dims(mu2, 1) + A2 @ gen.standard_normal(size=(k, num_samples))
         # compute densities for each
         # removed factor 2 from these as it cancels
         logdet1 = np.sum(np.log(np.diag(A1)))
@@ -292,9 +296,9 @@ def _tvd_numpy(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
         logdet1 = np.sum(np.log(np.diag(A1)))
         logdet2 = np.sum(np.log(np.diag(A2)))
         # generate random samples from each distribution
-        x10 = gen.standard_normal(size=(k, N))
+        x10 = gen.standard_normal(size=(k, num_samples))
         x1 = mm(1, A1, x10, lower=1)
-        x20 = gen.standard_normal(size=(k, N))
+        x20 = gen.standard_normal(size=(k, num_samples))
         x2 = mm(1, A2, x20, lower=1)
         # compute densities for each
         p1 = -np.sum(x10**2, 0) / 2 - logdet1
@@ -310,7 +314,7 @@ def _tvd_numpy(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
     return max(0, tvd)
 
 
-def _tvd_torch(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
+def _tvd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
 
     if type(sigma1) != torch.Tensor:
         sigma1 = torch.tensor(sigma1)
@@ -324,8 +328,12 @@ def _tvd_torch(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
         Ainv1 = torch.linalg.solve_triangular(A1, torch.eye(k), upper=False)
         Ainv2 = torch.linalg.solve_triangular(A2, torch.eye(k), upper=False)
         # generate random samples from each distribution
-        x1 = torch.Tensor.expand(mu1, 1) + A1 @ torch.randn((k, N), generator=gen)
-        x2 = torch.Tensor.expand(mu2, 1) + A2 @ torch.randn((k, N), generator=gen)
+        x1 = torch.Tensor.expand(mu1, 1) + A1 @ torch.randn(
+            (k, num_samples), generator=gen
+        )
+        x2 = torch.Tensor.expand(mu2, 1) + A2 @ torch.randn(
+            (k, num_samples), generator=gen
+        )
         # compute densities for each
         # removed factor 2 from these as it cancels
         logdet1 = torch.sum(torch.log(torch.diag(A1)))
@@ -349,9 +357,9 @@ def _tvd_torch(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
         logdet1 = torch.sum(torch.log(torch.diag(A1)))
         logdet2 = torch.sum(torch.log(torch.diag(A2)))
         # generate random samples from each distribution
-        x10 = torch.randn((k, N), generator=gen)
+        x10 = torch.randn((k, num_samples), generator=gen)
         x1 = torch.Tensor(mm(1, A1, x10, lower=1))
-        x20 = torch.randn((k, N), generator=gen)
+        x20 = torch.randn((k, num_samples), generator=gen)
         x2 = torch.Tensor(mm(1, A2, x20, lower=1))
         # compute densities for each
         p1 = -torch.sum(x10**2, 0) / 2 - logdet1
@@ -460,6 +468,7 @@ def measure_dist(
     meas_name: str = "TVD",
     alpha: Optional[float] = None,
     b: float = 1 / 100,
+    samples_jsd_tvd=10000,
     show_progress: Optional[bool] = True,
 ):
     """
@@ -489,7 +498,9 @@ def measure_dist(
     b : float, optional
         Scalar used to compute a default `alpha` when `alpha` is None. Default is
         1/100.
-    show_progress: bool, optional
+    samples_jsd_tvd : integer, optional
+        Number of samples used for computing JSD and TVD measures. Defaults to 10000.
+    show_progress : bool, optional
         Boolean to turn the tqdm progress bars on (True) or off (False). Default is on (True).
 
     Returns
@@ -546,7 +557,7 @@ def measure_dist(
                     or measure == _tvd_torch
                 ):
                     dist[i, j] = measure(
-                        ci, cj, N=10000
+                        ci, cj, num_samples=samples_jsd_tvd
                     )  # not using mean, for a generalized code mean should be provided
                 else:
                     dist[i, j] = measure(
