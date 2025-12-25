@@ -16,7 +16,7 @@ from .cov_utils import (
 ## Metrics
 
 
-def wasserstein(sigma1, sigma2, mu1=None, mu2=None):
+def _wasserstein_numpy(sigma1, sigma2, mu1=None, mu2=None):
 
     # these conditions do not check for one mean is non zero and other is zero !!!
     if mu1 is not None and mu2 is not None:
@@ -38,7 +38,7 @@ def wasserstein(sigma1, sigma2, mu1=None, mu2=None):
     return d_sq**0.5
 
 
-def wasserstein_torch_comp(sigma1, sigma2, mu1=None, mu2=None):
+def _wasserstein_torch(sigma1, sigma2, mu1=None, mu2=None):
 
     # these conditions do not check for one mean is non zero and other is zero !!!
     if mu1 is not None and mu2 is not None:
@@ -70,24 +70,56 @@ def wasserstein_torch_comp(sigma1, sigma2, mu1=None, mu2=None):
     return d_sq**0.5
 
 
-def hellinger(sigma1, sigma2, mu1=None, mu2=None):
+def _hellinger_numpy(sigma1, sigma2, mu1=None, mu2=None):
 
-    d_B = bhattacharyya(sigma1, sigma2, mu1, mu2)
+    d_B = _bhattacharyya_numpy(sigma1, sigma2, mu1, mu2)
 
-    d = np.sqrt(2 * (1 - np.exp(-d_B)))
+    d = np.sqrt(2 * (1 - np.exp(d_B)))
 
     return d
 
 
-def mahalanobis(
+def _hellinger_torch(sigma1, sigma2, mu1=None, mu2=None):
+
+    d_B = _bhattacharyya_torch(sigma1, sigma2, mu1, mu2)
+
+    d = torch.sqrt(2 * (1 - torch.exp(d_B)))
+
+    return d
+
+
+def _mahalanobis_numpy(
     sigma1, sigma2, mu1=None, mu2=None
 ):  # not the true mahalanobis definition
 
     if mu1 is None and mu2 is None:
-        d = np.array(0)
+        d = np.array([0.0])
     else:
         delta_mu = np.subtract(mu1, mu2)
-        d = np.inner(delta_mu, np.matmul((np.linalg.inv(sigma1 + sigma2)), delta_mu))
+        d_sq = np.inner(
+            delta_mu,
+            np.matmul((np.linalg.inv(np.divide(sigma1 + sigma2, 2))), delta_mu),
+        )
+        d = d_sq**0.5
+
+    return d
+
+
+def _mahalanobis_torch(
+    sigma1, sigma2, mu1=None, mu2=None
+):  # not the true mahalanobis definition
+
+    if mu1 is None and mu2 is None:
+        d = torch.Tensor([0.0])
+    else:
+        delta_mu = torch.subtract(mu1, mu2)
+        d_sq = torch.inner(
+            delta_mu,
+            torch.matmul(
+                (torch.linalg.inv(torch.divide(sigma1 + sigma2, 2))), delta_mu
+            ),
+        )
+        d = d_sq**0.5
 
     return d
 
@@ -96,11 +128,11 @@ gen = np.random.Generator(np.random.SFC64(42))
 
 if torch.cuda.is_available():
     gen_torch_cuda = torch.Generator(device="cuda").manual_seed(42)
-else:
+    # else: # I am commenting this out as I think if cuda is available both seeds should be initiated. But I will think better on it.
     gen_torch_cpu = torch.Generator(device="cpu").manual_seed(42)
 
 
-def jsd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
+def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
 
     if mu1 is None and mu2 is None:
         k = sigma1.shape[0]
@@ -160,7 +192,7 @@ def jsd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
     return max(0, jsd)
 
 
-def jsd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
+def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
 
     if type(sigma1) != torch.Tensor:
         sigma1 = torch.tensor(sigma1)
@@ -226,7 +258,7 @@ def jsd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
     return max(0, jsd)
 
 
-def tvd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
+def _tvd_numpy(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
 
     if mu1 is not None and mu2 is not None:
         k = len(mu1)
@@ -278,7 +310,7 @@ def tvd(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
     return max(0, tvd)
 
 
-def tvd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
+def _tvd_torch(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
 
     if type(sigma1) != torch.Tensor:
         sigma1 = torch.tensor(sigma1)
@@ -338,8 +370,9 @@ def tvd_torch_comp(sigma1, sigma2, mu1=None, mu2=None, N=10000, gen=None):
 ## Divergences
 
 
-def KL_div(sigma1, sigma2, mu1=None, mu2=None):
+def _KL_div_numpy(sigma1, sigma2, mu1=None, mu2=None):
 
+    # Handling of mean term feels a bit sloppy. Can be improved in the future
     if mu1 is None:
         mu1 = np.zeros(sigma1.shape[0])
 
@@ -350,7 +383,7 @@ def KL_div(sigma1, sigma2, mu1=None, mu2=None):
 
     inv_s2 = np.linalg.inv(sigma2)
 
-    if (delta_mu < 1e-50).all():  # only this condition is tested
+    if (delta_mu < 1e-15).all():  # only this condition is tested
         mean_term = 0
 
     else:  # this condition was not tested
@@ -365,14 +398,54 @@ def KL_div(sigma1, sigma2, mu1=None, mu2=None):
     return d
 
 
-def bhattacharyya(sigma1, sigma2, mu1=None, mu2=None):
+def _KL_div_torch(sigma1, sigma2, mu1=None, mu2=None):
 
-    means_term = mahalanobis(sigma1, sigma2, mu1, mu2)
+    # Handling of mean term feels a bit sloppy. Can be improved in the future
+    if mu1 is None:
+        mu1 = torch.zeros(sigma1.shape[0])
+
+    if mu2 is None:
+        mu2 = torch.zeros(sigma2.shape[0])
+
+    delta_mu = torch.subtract(mu2, mu1)
+
+    inv_s2 = torch.linalg.inv(sigma2)
+
+    if (delta_mu < 1e-15).all():  # only this condition is tested
+        mean_term = 0
+
+    else:  # this condition was not tested
+        mean_term = torch.transpose(delta_mu) @ inv_s2 @ delta_mu
+
+    tr_term = torch.trace(inv_s2 @ sigma1)
+
+    log_term = torch.linalg.slogdet(sigma1)[1] - torch.linalg.slogdet(sigma2)[1]
+
+    d = (1 / 2) * (mean_term + tr_term - log_term - sigma1.shape[0])
+
+    return d
+
+
+def _bhattacharyya_numpy(sigma1, sigma2, mu1=None, mu2=None):
+
+    means_term = _mahalanobis_numpy(sigma1, sigma2, mu1, mu2)
     log_term = np.linalg.slogdet(np.divide(sigma1 + sigma2, 2))[1] - 0.5 * (
         np.linalg.slogdet(sigma1)[1] + np.linalg.slogdet(sigma2)[1]
     )  # these may also require float64 casting
 
-    d = 1 / 8 * means_term + 1 / 2 * log_term
+    d = (1 / 8) * means_term + (1 / 2) * log_term
+
+    return d
+
+
+def _bhattacharyya_torch(sigma1, sigma2, mu1=None, mu2=None):
+
+    means_term = _mahalanobis_torch(sigma1, sigma2, mu1, mu2)
+    log_term = torch.linalg.slogdet(torch.divide(sigma1 + sigma2, 2))[1] - 0.5 * (
+        torch.linalg.slogdet(sigma1)[1] + torch.linalg.slogdet(sigma2)[1]
+    )  # these may also require float64 casting
+
+    d = (1 / 8) * means_term + (1 / 2) * log_term
 
     return d
 
@@ -429,7 +502,9 @@ def measure_dist(
     >>> # Given a list of covariance matrices `cov_list`
     >>> dist_matrix = measure_dist(cov_list, meas_name="TVD")
     """
-
+    # I am turning covs into a list or matrices rather than using it as torch/numpy array. I don't know if it is a good thing to do.
+    # I am doing it inside `check_and_change_input_format` as the whole `measure_dist` function is written to work with list of matrices.
+    # But normally functions such as `cov_trace_norm_sigma_N` accept 3D torch/np arrays and work more efficiently that way.
     covs, N, module = check_and_change_input_format(covs)
 
     if alpha == None:
@@ -461,7 +536,12 @@ def measure_dist(
 
             if j > i:
 
-                if measure == jsd or measure == tvd:
+                if (
+                    measure == _jsd_numpy
+                    or measure == _tvd_numpy
+                    or measure == _jsd_torch
+                    or measure == _tvd_torch
+                ):
                     dist[i, j] = measure(
                         ci, cj, N=10000
                     )  # not using mean, for a generalized code mean should be provided
@@ -482,28 +562,30 @@ def select_measure(cov_mtx, meas_name, module=None):
     if module == None:
         module = check_input_format(cov_mtx)
 
+    meas_name = meas_name.strip().casefold()
+
     if module == np:
 
         if meas_name == "wasserstein":
-            measure = wasserstein
+            measure = _wasserstein_numpy
 
         elif meas_name == "hellinger":
-            measure = hellinger
+            measure = _hellinger_numpy
 
-        elif meas_name == "TVD":
-            measure = functools.partial(tvd, gen=gen)
+        elif meas_name == "tvd":
+            measure = functools.partial(_tvd_numpy, gen=gen)
 
-        elif meas_name == "JSD":
-            measure = functools.partial(jsd, gen=gen)
+        elif meas_name == "jsd":
+            measure = functools.partial(_jsd_numpy, gen=gen)
 
-        elif meas_name == "KL_div":
-            measure = KL_div
+        elif meas_name == "kl div" or meas_name == "kl divergence":
+            measure = _KL_div_numpy
 
         elif meas_name == "bhattacharyya":
-            measure = bhattacharyya
+            measure = _bhattacharyya_numpy
 
         elif meas_name == "mahalanobis":
-            measure = mahalanobis
+            measure = _mahalanobis_numpy
 
         else:
             raise NotImplementedError(
@@ -513,21 +595,33 @@ def select_measure(cov_mtx, meas_name, module=None):
     elif module == torch:
 
         if meas_name == "wasserstein":
-            measure = wasserstein_torch_comp
+            measure = _wasserstein_torch
 
-        elif meas_name == "TVD":
+        elif meas_name == "hellinger":
+            measure = _hellinger_torch
+
+        elif meas_name == "tvd":
             # if cov mtx is on GPU, provide the TVD with the CUDA seeded generator, or else with the CPU seeded generator
             if cov_mtx.is_cuda:
-                measure = functools.partial(tvd_torch_comp, gen=gen_torch_cuda)
+                measure = functools.partial(_tvd_torch, gen=gen_torch_cuda)
             else:
-                measure = functools.partial(tvd_torch_comp, gen=gen_torch_cpu)
+                measure = functools.partial(_tvd_torch, gen=gen_torch_cpu)
 
-        elif meas_name == "JSD":
+        elif meas_name == "jsd":
             # if cov mtx is on GPU, provide the JSD with the CUDA seeded generator, or else with the CPU seeded generator
             if cov_mtx.is_cuda:
-                measure = functools.partial(jsd_torch_comp, gen=gen_torch_cuda)
+                measure = functools.partial(_jsd_torch, gen=gen_torch_cuda)
             else:
-                measure = functools.partial(jsd_torch_comp, gen=gen_torch_cpu)
+                measure = functools.partial(_jsd_torch, gen=gen_torch_cpu)
+
+        elif meas_name == "kl div" or meas_name == "kl divergence":
+            measure = _KL_div_torch
+
+        elif meas_name == "bhattacharyya":
+            measure = _bhattacharyya_torch
+
+        elif meas_name == "mahalanobis":
+            measure = _mahalanobis_torch
 
         else:
             raise NotImplementedError(
