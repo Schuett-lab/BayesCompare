@@ -460,6 +460,7 @@ def measure_dist(
     meas_name: str = "TVD",
     alpha: Optional[float] = None,
     b: float = 1 / 100,
+    show_progress: Optional[bool] = True,
 ):
     """
     Compute a symmetric pairwise distance matrix from the list of covariances.
@@ -488,6 +489,8 @@ def measure_dist(
     b : float, optional
         Scalar used to compute a default `alpha` when `alpha` is None. Default is
         1/100.
+    show_progress: bool, optional
+        Boolean to turn the tqdm progress bars on (True) or off (False). Default is on (True).
 
     Returns
     -------
@@ -528,7 +531,7 @@ def measure_dist(
 
     dist = module.zeros((N, N))
 
-    progress_bar = tqdm.tqdm(total=int((N * (N - 1)) / 2))
+    progress_bar = tqdm.tqdm(total=int((N * (N - 1)) / 2), disable=not show_progress)
 
     for i, ci in enumerate(covs):
 
