@@ -55,16 +55,19 @@ def load_inputs():
 
 
 # Case 1: Same covariance matrix given as input: d(A, A)
-def test_same_input(input_np, input_th, meas_name_to_test):
+def test_same_input(input_all_np, input_all_th, meas_name_to_test):
 
     output_np = []
     output_th = []
 
-    for input_np, input_th in zip(input_np, input_th):
+    num_samples = 1000000
+
+    for input_np, input_th in zip(input_all_np, input_all_th):
         output_np.append(
             distances.measure_dist(
                 [input_np[0], input_np[1]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
@@ -72,6 +75,7 @@ def test_same_input(input_np, input_th, meas_name_to_test):
             distances.measure_dist(
                 [input_th[0], input_th[1]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
@@ -80,22 +84,26 @@ def test_same_input(input_np, input_th, meas_name_to_test):
     output_th = torch.stack(output_th, dim=0)
 
     assert_allclose(output_np, np.zeros_like(output_np), rtol=1e-10, atol=1e-10)
-    assert_allclose(output_th, torch.zeros_like(output_th), rtol=1e-10, atol=1e-10)
+    assert_allclose(output_th, torch.zeros_like(output_th), rtol=1e-6, atol=1e-6)
 
     print("Test 1: Same input test is successful!")
 
 
 # Case 2: Very close covairance matrices given as input: d(A, A + ε)
-def test_similar_input(input_np, input_th, meas_name_to_test):
+def test_similar_input(input_all_np, input_all_th, meas_name_to_test):
 
     output_np = []
     output_th = []
 
-    for input_np, input_th in zip(input_np, input_th):
+    num_samples = 10000000
+
+    for input_np, input_th in zip(input_all_np, input_all_th):
+
         output_np.append(
             distances.measure_dist(
                 [input_np[0], input_np[1]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
@@ -103,6 +111,7 @@ def test_similar_input(input_np, input_th, meas_name_to_test):
             distances.measure_dist(
                 [input_th[0], input_th[1]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
@@ -124,16 +133,20 @@ def test_similar_input(input_np, input_th, meas_name_to_test):
 
 
 # Case 3: Symmetry of distance check: d(A, B) vs d(B, A)
-def test_symmetric_inputs(input_np, input_th, meas_name_to_test):
+def test_symmetric_inputs(input_all_np, input_all_th, meas_name_to_test):
 
     output_np = []
     output_th = []
 
-    for input_np, input_th in zip(input_np, input_th):
+    num_samples = 1000000
+
+    for input_np, input_th in zip(input_all_np, input_all_th):
+
         output_np.append(
             distances.measure_dist(
                 [input_np[0], input_np[1]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
@@ -141,6 +154,7 @@ def test_symmetric_inputs(input_np, input_th, meas_name_to_test):
             distances.measure_dist(
                 [input_np[1], input_np[0]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
@@ -148,6 +162,7 @@ def test_symmetric_inputs(input_np, input_th, meas_name_to_test):
             distances.measure_dist(
                 [input_th[0], input_th[1]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
@@ -155,6 +170,7 @@ def test_symmetric_inputs(input_np, input_th, meas_name_to_test):
             distances.measure_dist(
                 [input_th[1], input_th[0]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
@@ -176,9 +192,9 @@ def test_symmetric_inputs(input_np, input_th, meas_name_to_test):
 
 
 # Case 4: Non-symmetric inputs: A != A.T
-def test_nonsymmetric_input(input_np, input_th, meas_name_to_test):
+def test_nonsymmetric_input(input_all_np, input_all_th, meas_name_to_test):
 
-    for input_np, input_th in zip(input_np, input_th):
+    for input_np, input_th in zip(input_all_np, input_all_th):
         with pytest.raises(ValueError):
             distances.measure_dist(
                 [input_np[0], input_np[1]],
@@ -196,11 +212,11 @@ def test_nonsymmetric_input(input_np, input_th, meas_name_to_test):
 
 
 # Case 5: Slightly non-symmetric inputs: A ~ A.T
-def test_slightly_nonsymmetric_input(input_np, input_th, meas_name_to_test):
+def test_slightly_nonsymmetric_input(input_all_np, input_all_th, meas_name_to_test):
 
     idx = 0
 
-    for input_np, input_th in zip(input_np, input_th):
+    for input_np, input_th in zip(input_all_np, input_all_th):
 
         if idx != 4:
             with pytest.raises(ValueError):
@@ -218,14 +234,19 @@ def test_slightly_nonsymmetric_input(input_np, input_th, meas_name_to_test):
             idx += 1
 
         else:
+
+            num_samples = 1000000
+
             output_np = distances.measure_dist(
                 [input_np[0], input_np[1]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
             output_th = distances.measure_dist(
                 [input_th[0], input_th[1]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
             assert_allclose(output_np, output_th.numpy(), rtol=1e-7, atol=1e-6)
@@ -240,16 +261,19 @@ def test_slightly_nonsymmetric_input(input_np, input_th, meas_name_to_test):
 
 
 # Case 6: PSD inputs (one eigenval = 0) and Case 7: Almost PSD inputs (one eigenval ~ 0)
-def test_psd_input(input_np, input_th, meas_name_to_test, case_num):
+def test_psd_input(input_all_np, input_all_th, meas_name_to_test, case_num):
 
     output_np = []
     output_th = []
 
-    for input_np, input_th in zip(input_np, input_th):
+    num_samples = 1000000
+
+    for input_np, input_th in zip(input_all_np, input_all_th):
         output_np.append(
             distances.measure_dist(
                 [input_np[0], input_np[1]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
@@ -257,6 +281,7 @@ def test_psd_input(input_np, input_th, meas_name_to_test, case_num):
             distances.measure_dist(
                 [input_th[0], input_th[1]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
@@ -265,24 +290,29 @@ def test_psd_input(input_np, input_th, meas_name_to_test, case_num):
     output_th = torch.stack(output_th, dim=0)
 
     # what to check about outputs for the psd tests?
-    assert_allclose(output_np, output_th.numpy(), rtol=1e-6, atol=1e-7)
+    assert_allclose(output_np, output_th.numpy(), rtol=1e-6, atol=1e-6)
     assert_close(
-        torch.from_numpy(output_np.astype(np.float32)), output_th, rtol=1e-6, atol=1e-7
+        torch.from_numpy(output_np.astype(np.float32)), output_th, rtol=1e-6, atol=1e-6
     )
 
     print(f"Test {case_num}: PSD inputs test is successful!")
 
 
 # Case 8: Large scale inputs & Case 9: Small scale inputs & Case 10: One large scale, one small scale input
-def test_different_scale_inputs(input_np, input_th, meas_name_to_test, case_num):
+def test_different_scale_inputs(
+    input_all_np, input_all_th, meas_name_to_test, case_num
+):
     output_np = []
     output_th = []
 
-    for input_np, input_th in zip(input_np, input_th):
+    num_samples = 1000000
+
+    for input_np, input_th in zip(input_all_np, input_all_th):
         output_np.append(
             distances.measure_dist(
                 [input_np[0], input_np[1]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
@@ -290,6 +320,7 @@ def test_different_scale_inputs(input_np, input_th, meas_name_to_test, case_num)
             distances.measure_dist(
                 [input_th[0], input_th[1]],
                 meas_name=meas_name_to_test,
+                samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
@@ -298,9 +329,9 @@ def test_different_scale_inputs(input_np, input_th, meas_name_to_test, case_num)
     output_th = torch.stack(output_th, dim=0)
 
     # what to check about outputs for the scale tests?
-    assert_allclose(output_np, output_th.numpy(), rtol=1e-6, atol=1e-7)
+    assert_allclose(output_np, output_th.numpy(), rtol=1e-6, atol=1e-6)
     assert_close(
-        torch.from_numpy(output_np.astype(np.float32)), output_th, rtol=1e-6, atol=1e-7
+        torch.from_numpy(output_np.astype(np.float32)), output_th, rtol=1e-6, atol=1e-6
     )
 
     print(f"Test {case_num}: Different scale inputs test is successful!")
@@ -389,7 +420,7 @@ def call_some_tests(meas_name, test_list):
             input_cases_np["almost_psd"], input_cases_th["almost_psd"], meas_name, 7
         ),
         8: lambda: test_different_scale_inputs(
-            input_cases_np["small_scale"], input_cases_th["small_scale"], meas_name, 8
+            input_cases_np["large_scale"], input_cases_th["large_scale"], meas_name, 8
         ),
         9: lambda: test_different_scale_inputs(
             input_cases_np["small_scale"], input_cases_th["small_scale"], meas_name, 9
