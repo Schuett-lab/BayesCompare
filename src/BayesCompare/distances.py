@@ -4,6 +4,7 @@ from scipy.linalg.blas import dtrmm as mm
 import tqdm
 import torch
 import functools
+import warnings
 from typing import Sequence, Union, Optional
 from .cov_utils import (
     check_cov_normalized,
@@ -29,11 +30,7 @@ def _wasserstein_numpy(sigma1, sigma2, mu1=None, mu2=None):
     tr_term = sigma1 + sigma2 - 2 * (sig1_sig2_sqrt)
     d_sq = means_term + np.trace(tr_term)
 
-    if d_sq < 0 and d_sq > -1e-7:
-        d_sq = 0
-
-    elif d_sq < -1e-7:
-        raise ValueError(f"Wasserstein distance cannot be negative. Value is: {d_sq}")
+    d_sq = prevent_negative_square(d_sq, "Wasserstein")
 
     return d_sq**0.5
 
@@ -61,11 +58,7 @@ def _wasserstein_torch(sigma1, sigma2, mu1=None, mu2=None):
     tr_term = sigma1 + sigma2 - 2 * (sig1_sig2_sqrt)
     d_sq = means_term + torch.trace(tr_term)
 
-    if d_sq < 0 and d_sq > -1e-7:
-        d_sq = 0
-
-    elif d_sq < -1e-7:
-        raise ValueError(f"Wasserstein distance cannot be negative. Value is: {d_sq}")
+    d_sq = prevent_negative_square(d_sq, "Wasserstein")
 
     return d_sq**0.5
 
@@ -74,18 +67,22 @@ def _hellinger_numpy(sigma1, sigma2, mu1=None, mu2=None):
 
     d_B = _bhattacharyya_numpy(sigma1, sigma2, mu1, mu2)
 
-    d = np.sqrt(2 * (1 - np.exp(d_B)))
+    d_sq = 2 * (1 - np.exp(d_B))
 
-    return d
+    d_sq = prevent_negative_square(d_sq, "Hellinger")
+
+    return d_sq**0.5
 
 
 def _hellinger_torch(sigma1, sigma2, mu1=None, mu2=None):
 
     d_B = _bhattacharyya_torch(sigma1, sigma2, mu1, mu2)
 
-    d = torch.sqrt(2 * (1 - torch.exp(d_B)))
+    d_sq = 2 * (1 - torch.exp(d_B))
 
-    return d
+    d_sq = prevent_negative_square(d_sq, "Hellinger")
+
+    return d_sq**0.5
 
 
 def _mahalanobis_numpy(
@@ -100,6 +97,7 @@ def _mahalanobis_numpy(
             delta_mu,
             np.matmul((np.linalg.inv(np.divide(sigma1 + sigma2, 2))), delta_mu),
         )
+        d_sq = prevent_negative_square(d_sq, "Mahalanobis")
         d = d_sq**0.5
 
     return d
@@ -119,6 +117,7 @@ def _mahalanobis_torch(
                 (torch.linalg.inv(torch.divide(sigma1 + sigma2, 2))), delta_mu
             ),
         )
+        d_sq = prevent_negative_square(d_sq, "Mahalanobis")
         d = d_sq**0.5
 
     return d
@@ -571,6 +570,9 @@ def measure_dist(
     return dist
 
 
+## Helper functions
+
+
 def select_measure(cov_mtx, meas_name, module=None):
 
     if module == None:
@@ -647,3 +649,15 @@ def select_measure(cov_mtx, meas_name, module=None):
             "Covariance matrices must be either a torch tensor or a numpy array."
         )
     return measure
+
+
+def prevent_negative_square(d_sq, dist_name):
+
+    if d_sq < 0 and d_sq > -1e-7:
+        d_sq = 0
+
+    elif d_sq < -1e-7:
+        d_sq = 0
+        warnings.warn(f"{dist_name} distance cannot be negative. Value is: {d_sq}")
+
+    return d_sq
