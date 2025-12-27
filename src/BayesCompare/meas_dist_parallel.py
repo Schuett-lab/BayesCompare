@@ -36,6 +36,7 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
 
             init_mtx = np.empty((N, N))
             init_mtx[:] = np.nan
+            np.fill_diagonal(init_mtx, 0)
 
             dist_dset = f.create_dataset("dist", shape=(N, N), data=init_mtx)
             indices = [(i, j) for j in range(N) for i in range(j + 1, N)]
