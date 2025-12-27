@@ -63,6 +63,25 @@ def cov_sigma_N(
     noise_var: float,
     signal_var: Optional[float] = None,
 ) -> Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]:
+    """
+    Computes the covariance matrix with added noise variance.
+
+    This function takes a covariance matrix or a sequence of covariance matrices and
+    computes a new covariance matrix that incorporates noise variance and an optional
+    signal variance.
+
+    Args:
+        covs (Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]):
+            A covariance matrix or a sequence of covariance matrices.
+        noise_var (float) : The variance of the noise to be added.
+        signal_var (Optional[float]) : The variance of the signal. If None, it is set to
+            (1 - noise_var).
+
+    Returns:
+        cov_sigma_out (Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]):
+            The modified covariance matrix or a sequence of modified covariance matrices
+            with added noise and signal variance.
+    """
 
     if not signal_var:
         signal_var = 1 - noise_var
@@ -87,6 +106,21 @@ def cov_sigma_N(
 def trace_norm_N(
     covs: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
 ) -> Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]:
+    """
+    Normalize N covariance matrices by trace norm.
+
+    Parameters
+    ----------
+    covs : Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]
+        A covariance matrix or batch of covariance matrices, or a sequence thereof.
+        If a sequence, each element is independently normalized.
+        Expected shape for batch: (batch, n, n)
+
+    Returns
+    -------
+    cov_norm : Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]
+        Trace-normalized covariance matrices with the same type and shape as input.
+    """
 
     if isinstance(covs, (list, tuple)):
         cov_norm = []
@@ -113,7 +147,21 @@ def cov_trace_norm_sigma_N(
     covs: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
     noise_var: float,
     signal_var: Optional[float] = None,
-) -> torch.Tensor:
+) -> Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]:
+    """
+    Computes the normalized and noise added covariance matrices based on the trace norm and given noise variance.
+    Args:
+        covs (Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]):
+            A sequence of covariance matrices or a single covariance matrix, which can be either
+            a NumPy ndarray or a PyTorch tensor or a list of those types.
+        noise_var (float):
+            The variance of the noise to be added.
+        signal_var (Optional[float], optional):
+            The variance of the signal. If None, it is set to (1 - noise_var).
+    Returns:
+        normed_sigma_covs: (Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]):
+            Resulting covariances after applying the trace norm and the specified noise and signal variances.
+    """
 
     normed_sigma_covs = cov_sigma_N(
         trace_norm_N(covs), noise_var=noise_var, signal_var=signal_var
@@ -133,6 +181,9 @@ def check_cov_normalized(cov: NDArray | torch.Tensor, tolerance=1e-4) -> bool:
 
 
 def check_cov_symmetry(cov_mtx, rtol=1e-05, atol=1e-08):
+    """
+    Check if the given covariance is trace symmetric up to a tolerance point.
+    """
 
     module = check_input_format(cov_mtx)
     return module.allclose(cov_mtx, cov_mtx.T, rtol=rtol, atol=atol)
@@ -181,7 +232,7 @@ def check_and_change_input_format(
     N : int
         Number of matrices.
 
-    module:type
+    module : type
         torch if input is a torch.Tensor, np if input is a np.ndarray or the respective type if a list of either of these types.
 
     Raises

@@ -574,6 +574,40 @@ def measure_dist(
 
 
 def select_measure(cov_mtx, meas_name, module=None):
+    """
+    Select and return the appropriate distance measure function based on input parameters.
+
+    This function selects a distance/similarity measure function that is compatible with
+    the given covariance matrix type (NumPy array or PyTorch tensor) and the specified
+    metric name.
+
+    Parameters
+    ----------
+    cov_mtx : np.ndarray or torch.Tensor
+        The covariance matrix for which to select a measure. Used to infer the module
+        type if not explicitly provided, and to determine device placement (CPU/GPU)
+        for PyTorch tensors.
+    meas_name : str
+        The name of the distance measure to use. Case-insensitive. Supported measures
+        include: "wasserstein", "hellinger", "tvd", "jsd", "kl divergence", "bhattacharyya",
+        and "mahalanobis".
+    module : {np, torch}, optional
+        The module type indicating whether to use NumPy or PyTorch implementations.
+        If None (default), the module type is inferred from cov_mtx using check_input_format.
+
+    Returns
+    -------
+    callable
+        A function that computes the selected distance measure between two covariance
+        matrices. For stochastic measures (TVD, JSD), returns a functools.partial object
+        with the appropriate random generator pre-configured.
+
+    Raises
+    ------
+    NotImplementedError
+        If the metric name is not valid for the given module type, or if the covariance
+        matrix is neither a NumPy array nor a PyTorch tensor.
+    """
 
     if module == None:
         module = check_input_format(cov_mtx)
@@ -652,12 +686,32 @@ def select_measure(cov_mtx, meas_name, module=None):
 
 
 def prevent_negative_square(d_sq, dist_name):
+    """
+    Prevent negative squared distances due to numerical precision errors.
+
+    This function handles small negative values that may arise from floating-point
+    arithmetic when computing distances. Values very close to zero (within -1e-7)
+    are set to 0 without warning, while more significantly negative values are
+    flagged with a warning as they indicate a problem with the distance calculation.
+
+    Parameters
+    ----------
+    d_sq : float
+        The squared distance value that may be negative due to numerical errors.
+    dist_name : str
+        The name of the distance metric, used for warning messages.
+
+    Returns
+    -------
+    float
+        The corrected squared distance value, with negative values set to 0.
+    """
 
     if d_sq < 0 and d_sq > -1e-7:
         d_sq = 0
 
     elif d_sq < -1e-7:
-        d_sq = 0
         warnings.warn(f"{dist_name} distance cannot be negative. Value is: {d_sq}")
+        d_sq = 0
 
     return d_sq
