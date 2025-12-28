@@ -514,7 +514,7 @@ def measure_dist(
     >>> # Given a list of covariance matrices `cov_list`
     >>> dist_matrix = measure_dist(cov_list, meas_name="TVD")
     """
-    # I am turning covs into a list or matrices rather than using it as torch/numpy array. I don't know if it is a good thing to do.
+    # I am turning covs into a list of matrices rather than using it as torch/numpy array. I don't know if it is a good thing to do.
     # I am doing it inside `check_and_change_input_format` as the whole `measure_dist` function is written to work with list of matrices.
     # But normally functions such as `cov_trace_norm_sigma_N` accept 3D torch/np arrays and work more efficiently that way.
     covs, N, module = check_and_change_input_format(covs)
