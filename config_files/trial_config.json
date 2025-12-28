@@ -1,0 +1,11 @@
+{
+"checkpoint_dirs": ["snapshot_ep199_seed111_iter4.pth", "snapshot_ep199_seed222_iter6.pth", "snapshot_ep200_seed888_iter4.pth", "snapshot_ep200_seed999_iter4.pth"],
+"model_name": "vit_b_16",
+"seeds": ["111", "222", "888", "999"],
+"model_weights_name" : "ViT_B_16_IMAGENET1K_V1",
+"wanted_layers_dir" : "wanted_layers_vitb16.json",
+"num_ims" : 1000,
+"covs_filename" : "covs_1000_vit_b_16_alllayers",
+"noise_bs" : [[1, 100], [1, 125], [1, 150], [1, 175], [1, 200]],
+"measures" : ["wasserstein", "JSD", "TVD", "hellinger", "kl div", "bhattacharyya"]
+}

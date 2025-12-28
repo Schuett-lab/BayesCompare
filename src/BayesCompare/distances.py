@@ -597,7 +597,7 @@ def select_measure(cov_mtx, meas_name, module=None):
 
     Returns
     -------
-    callable
+    measure : callable
         A function that computes the selected distance measure between two covariance
         matrices. For stochastic measures (TVD, JSD), returns a functools.partial object
         with the appropriate random generator pre-configured.
@@ -703,7 +703,7 @@ def prevent_negative_square(d_sq, dist_name):
 
     Returns
     -------
-    float
+    d_sq : float
         The corrected squared distance value, with negative values set to 0.
     """
 
