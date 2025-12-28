@@ -114,8 +114,8 @@ def get_normed_cov_files(covs_dir):
 
     dir_path = Path(covs_dir)
 
-    # covs_<anything>_bval_<number>_<number>.pkl
-    pattern = re.compile(r"^covs_.*_bval_([0-9]+)_([0-9]+)\.pkl$")
+    # covs_<anything>_bval_<number>_<number>.npy
+    pattern = re.compile(r"^covs_.*_bval_([0-9]+)_([0-9]+)\.npy$")
 
     normed_cov_filenames = []
 
@@ -213,7 +213,12 @@ def get_covs_from_models(models_list, input_ims, model_args):
     model_args (dict): A dictionary consisting the parameters for the wanted layers and filename of the covariance matrices to be saved.
     """
 
-    wanted_layers = json.loads(model_args["wanted_layers_dir"])
+    with open(
+        os.path.join(DIRS["configs_path"], model_args["wanted_layers_dir"]),
+        "r",
+        encoding="utf-8",
+    ) as f:
+        wanted_layers = json.load(f)
 
     models_covs_list = []
 
@@ -255,8 +260,6 @@ def normalize_covs(model_args):
     covs = np.stack(covs)
     covs = covs.reshape(covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3])
 
-    normalized_covs = []
-
     for noise_b in tqdm.tqdm(model_args["noise_bs"], desc="Noise_Levels", position=1):
 
         normed_cov_full_filename = (
@@ -265,16 +268,17 @@ def normalize_covs(model_args):
             + str(noise_b[0])
             + "_"
             + str(noise_b[1])
-            + ".pkl"
+            + ".npy"
         )
 
         b = noise_b[0] / noise_b[1]
         noise_level = model_args["num_ims"] * b / (1 + (model_args["num_ims"] * b))
 
-        for model_covs in tqdm.tqdm(covs, desc="Models", position=2):
-            normalized_covs.append(
-                bc.cov_utils.cov_trace_norm_sigma_N(model_covs, noise_var=noise_level)
-            )
+        print(f"Analysis is done with noise level = {noise_level}")
+
+        normalized_covs = bc.cov_utils.cov_trace_norm_sigma_N(
+            covs, noise_var=noise_level
+        )
 
         np.save(
             os.path.join(DIRS["result_path"], normed_cov_full_filename), normalized_covs
@@ -292,7 +296,7 @@ def compute_dists(model_args):
     covs_filename_list = get_normed_cov_files(DIRS["result_path"])
 
     # In a for loop iterate through them to compute distances out of them.
-    for cov_filename in covs_filename_list:
+    for cov_filename in tqdm.tqdm(covs_filename_list, desc="Noise Levels", position=1):
         bc.measure_dist_parallel(
             covs_dir=os.path.join(DIRS["result_path"], cov_filename),
             output_dir=os.path.join(DIRS["result_path"]),
