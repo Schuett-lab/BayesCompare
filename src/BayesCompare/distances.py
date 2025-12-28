@@ -465,7 +465,7 @@ def measure_dist(
     covs: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
     mean: Optional[Union[Sequence[int], np.ndarray, torch.Tensor]] = None,
     meas_name: str = "TVD",
-    alpha: Optional[float] = None,
+    noise_var: Optional[float] = None,
     b: float = 1 / 100,
     samples_jsd_tvd=10000,
     show_progress: Optional[bool] = True,
@@ -482,20 +482,19 @@ def measure_dist(
     Parameters
     ----------
     covs : Sequence[array-like]
-        Iterable of covariance matrices (e.g., NumPy arrays). Each element is
-        passed to `trace_norm` before the pairwise distance is computed.
+        Iterable of covariance matrices (e.g., NumPy arrays).
     mean : array-like, optional
         Mean parameter.
     meas_name : str, optional
         Name of the distance/divergence measure to use. This name is resolved via
         `select_measure(meas_name)`. Default is "TVD".
-    alpha : float, optional
-        Weight applied inside `trace_norm` as the `eye_w` argument. If None,
-        alpha is computed from the number of input covariances `N = len(covs)` and
+    noise_var : float, optional
+        Noise variance to be applied in the normalization if the matrices are not already normalized.
+        If None, noise_var is computed from the number of images (dim) used to obtain the cov matrix and
         the parameter `b` using the formula
-        alpha = (N * b) / (1 + (N * b)). Default is None.
+        noise_var = (dim * b) / (1 + (dim * b)). Default is None.
     b : float, optional
-        Scalar used to compute a default `alpha` when `alpha` is None. Default is
+        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is
         1/100.
     samples_jsd_tvd : integer, optional
         Number of samples used for computing JSD and TVD measures. Defaults to 10000.
@@ -506,7 +505,7 @@ def measure_dist(
     -------
     dist : numpy.ndarray or torch.Tensor
         A symmetric 2-D array of shape (N, N) containing pairwise distances
-        between trace-normalized covariance inputs. The diagonal elements are zero.
+        between trace-normalized and noise added covariance inputs. The diagonal elements are zero.
         Only the upper triangle (j > i) is computed explicitly and mirrored to the
         lower triangle.
 
@@ -520,14 +519,15 @@ def measure_dist(
     # But normally functions such as `cov_trace_norm_sigma_N` accept 3D torch/np arrays and work more efficiently that way.
     covs, N, module = check_and_change_input_format(covs)
 
-    if alpha == None:
-        alpha = N * b / (1 + (N * b))
+    if noise_var == None:
+        dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+        noise_var = dim * b / (1 + (dim * b))
 
     idx = np.random.randint(len(covs))
     normalized = check_cov_normalized(covs[idx])
 
     if not normalized:
-        covs = cov_trace_norm_sigma_N(covs, noise_var=alpha)
+        covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
 
     # is it okay to check the symmetry of only one randomly chosen matrix or should I check all matrices in covs?
     symmetric = check_cov_symmetry(covs[idx])
