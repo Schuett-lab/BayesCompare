@@ -6,14 +6,14 @@ import multiprocessing as mp
 import pickle
 import tqdm
 
-from BayesCompare import distances as dist
+from BayesCompare import distances
 from BayesCompare.cov_utils import check_cov_normalized
 
 
 def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
 
     # convention for the name of the distance HDF5 files is: dist_<covs_list_filename>_<measure_name>.hdf5
-    measure_name = dist.simplify_string(measure_name)
+    measure_name = distances.simplify_string(measure_name)
     hdf_filename = (
         os.path.join(hdf_dir, "") + "dist_" + covs_name + "_" + measure_name + ".hdf5"
     )
@@ -176,7 +176,7 @@ def measure_dist_parallel(
 
     for name in meas_name:
 
-        measure = dist.select_measure(covs[0], name)
+        measure = distances.select_measure(covs[0], name)
 
         indices, output_filename = check_saved_hdf(output_dir, N, covs_filename, name)
 
