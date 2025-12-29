@@ -282,7 +282,9 @@ def normalize_covs(model_args):
         b = noise_b[0] / noise_b[1]
         noise_level = model_args["num_ims"] * b / (1 + (model_args["num_ims"] * b))
 
-        print(f"Analysis is done with noise level = {noise_level}")
+        print(
+            f"Normalized covariance file {normed_cov_full_filename} has the noise level = {noise_level}"
+        )
 
         normalized_covs = bc.cov_utils.cov_trace_norm_sigma_N(
             covs, noise_var=noise_level
