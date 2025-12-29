@@ -20,7 +20,7 @@ def get_dirs():
     # paths for ULHPC
     elif "soral" in cwd:
         dirs = {
-            "checkpoint_main_path": "/home/users/soral/ModelTraining/outputs/",
+            "checkpoint_main_path": "/home/users/soral/BayesCompare/checkpoints/",
             "input_images": "/home/users/soral/BayesCompare/input_ims/unlabeled2017/",
             "result_path": "/home/users/soral/BayesCompare/results/",
             "figure_path": "/home/users/soral/BayesCompare/figures/",

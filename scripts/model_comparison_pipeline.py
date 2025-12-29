@@ -37,7 +37,7 @@ def load_config(config_path):
     return config
 
 
-def load_trained_model(model_name, model_dir):
+def load_trained_model(model_name, model_dir, device="cpu"):
     """
     Loads the pretrained models from their directories.
 
@@ -45,14 +45,15 @@ def load_trained_model(model_name, model_dir):
     ----------
     model_name (str): Model name as used for creating an instance of that model in PyTorch Vision Models.
     model_dir (str): Directory of the checkpoint model whose weights will be used.
+    device (str): 'cuda' or 'cpu' indicating which device model will be. By default it is 'cpu'
 
     Returns
     -------
     model (nn.Module): Loaded pretrained model in eval mode.
     """
 
-    snapshot = torch.load(model_dir)
-    model = torchvision.models.get_model(model_name, weights=None)
+    snapshot = torch.load(model_dir, map_location=torch.device(device))
+    model = torchvision.models.get_model(model_name, weights=None).to(device)
     model.load_state_dict(snapshot["model"])
 
     # should it be in eval mode? It should be discussed!
@@ -181,6 +182,13 @@ def load_models(model_args):
     models (list[nn.Module]): A list containing the loaded models in order.
     """
 
+    if torch.cuda.is_available():
+        device = 'cuda'
+    else:
+        device = 'cpu'
+        
+    print(f"Device is set as {device}")
+    
     models = []
 
     for i, model_filename in enumerate(model_args["checkpoint_dirs"]):
@@ -191,12 +199,12 @@ def load_models(model_args):
             "seed_" + model_args["seeds"][i],
             model_filename,
         )
-        models.append(load_trained_model(model_args["model_name"], model_dir))
+        models.append(load_trained_model(model_args["model_name"], model_dir, device))
 
     weights = get_model_weights(model_args["model_weights_name"])
 
     models.append(
-        torchvision.models.get_model(model_args["model_name"], weights=weights)
+        torchvision.models.get_model(model_args["model_name"], weights=weights).to(device)
     )
 
     return models
