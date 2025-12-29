@@ -4,8 +4,8 @@
 "seeds": ["111", "222", "888", "999"],
 "model_weights_name" : "ViT_B_16_IMAGENET1K_V1",
 "wanted_layers_dir" : "wanted_layers_vitb16.json",
-"num_ims" : 1000,
-"covs_filename" : "covs_1000_vit_b_16_alllayers",
-"noise_bs" : [[1, 100], [1, 125], [1, 150], [1, 175], [1, 200]],
-"measures" : ["wasserstein", "JSD", "TVD", "hellinger", "kl div", "bhattacharyya"]
+"num_ims" : 50,
+"covs_filename" : "covs_1000_vit_b_16_somelayers",
+"noise_bs" : [[1, 100], [1, 125]],
+"measures" : ["wasserstein", "JSD", "TVD", "hellinger", "kl_div", "bhattacharyya"]
 }

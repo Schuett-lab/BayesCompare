@@ -2,6 +2,7 @@ import numpy as np
 import scipy.linalg
 from scipy.linalg.blas import dtrmm as mm
 import tqdm
+import re
 import torch
 import functools
 import warnings
@@ -573,6 +574,14 @@ def measure_dist(
 ## Helper functions
 
 
+def simplify_string(s: str) -> str:
+    """
+    - convert to lowercase
+    - remove underscores, dashes, and spaces
+    """
+    return re.sub(r"[ _-]+", "", s.lower())
+
+
 def select_measure(cov_mtx, meas_name, module=None):
     """
     Select and return the appropriate distance measure function based on input parameters.
@@ -612,7 +621,7 @@ def select_measure(cov_mtx, meas_name, module=None):
     if module == None:
         module = check_input_format(cov_mtx)
 
-    meas_name = meas_name.strip().casefold()
+    meas_name = simplify_string(meas_name)
 
     if module == np:
 
@@ -628,7 +637,7 @@ def select_measure(cov_mtx, meas_name, module=None):
         elif meas_name == "jsd":
             measure = functools.partial(_jsd_numpy, gen=gen)
 
-        elif meas_name == "kl div" or meas_name == "kl divergence":
+        elif meas_name == "kldiv" or meas_name == "kldivergence":
             measure = _KL_div_numpy
 
         elif meas_name == "bhattacharyya":

@@ -13,6 +13,7 @@ from BayesCompare.cov_utils import check_cov_normalized
 def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
 
     # convention for the name of the distance HDF5 files is: dist_<covs_list_filename>_<measure_name>.hdf5
+    measure_name = dist.simplify_string(measure_name)
     hdf_filename = (
         os.path.join(hdf_dir, "") + "dist_" + covs_name + "_" + measure_name + ".hdf5"
     )
