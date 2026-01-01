@@ -53,7 +53,9 @@ def load_trained_model(model_name, model_dir, device="cpu"):
     """
 
     snapshot = torch.load(model_dir, map_location=torch.device(device))
-    model = torchvision.models.get_model(model_name, weights=None).to(device)
+    model = torchvision.models.get_model(model_name, weights=None).to(
+        torch.device(device)
+    )
     model.load_state_dict(snapshot["model"])
 
     # should it be in eval mode? It should be discussed!
@@ -183,12 +185,12 @@ def load_models(model_args):
     """
 
     if torch.cuda.is_available():
-        device = 'cuda'
+        device = "cuda"
     else:
-        device = 'cpu'
-        
+        device = "cpu"
+
     print(f"Device is set as {device}")
-    
+
     models = []
 
     for i, model_filename in enumerate(model_args["checkpoint_dirs"]):
@@ -204,7 +206,9 @@ def load_models(model_args):
     weights = get_model_weights(model_args["model_weights_name"])
 
     models.append(
-        torchvision.models.get_model(model_args["model_name"], weights=weights).to(device)
+        torchvision.models.get_model(model_args["model_name"], weights=weights).to(
+            torch.device(device)
+        )
     )
 
     return models
@@ -316,18 +320,30 @@ def compute_dists(model_args):
 
 def main(model_args):
 
-    ims = load_ims(model_args["model_weights_name"], model_args["num_ims"])
+    # try to get these keys from the configuration dict.
+    # If not specified in config file, they will be True by default and computed.
+    get_covs = model_args.get("get_covs", True)
+    norm_covs = model_args.get("norm_covs", True)
+    comp_dists = model_args.get("comp_dists", True)
 
-    models_list = load_models(model_args)
+    if get_covs == True:
 
-    # directly saves the computed covs, so it doesn't return anything.
-    get_covs_from_models(models_list, ims, model_args)
+        ims = load_ims(model_args["model_weights_name"], model_args["num_ims"])
 
-    # directly saves the normalized covs, so it doesn't return anything.
-    normalize_covs(model_args)
+        models_list = load_models(model_args)
 
-    # directly saves the dists, so it doesn't return anything.
-    compute_dists(model_args)
+        # directly saves the computed covs, so it doesn't return anything.
+        get_covs_from_models(models_list, ims, model_args)
+
+    if norm_covs == True:
+
+        # directly saves the normalized covs, so it doesn't return anything.
+        normalize_covs(model_args)
+
+    if comp_dists == True:
+
+        # directly saves the dists, so it doesn't return anything.
+        compute_dists(model_args)
 
 
 if __name__ == "__main__":
