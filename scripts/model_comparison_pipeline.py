@@ -31,7 +31,7 @@ def load_config(config_path):
     config (dict): Configuration parameters loaded from the JSON file.
     """
     with open(config_path) as file:
-        print("Training is done with the configuration file: " + str(config_path))
+        print("Analysis is done with the configuration file: " + str(config_path))
         config = json.load(file)
 
     return config
@@ -247,7 +247,12 @@ def get_covs_from_models(models_list, input_ims, model_args):
     # Save the models_covs_list which have all the wanted activations for all models
     cov_full_filename = model_args["covs_filename"] + ".pkl"
 
-    with open(os.path.join(DIRS["result_path"], cov_full_filename), "wb") as f:
+    with open(
+        os.path.join(
+            DIRS["result_path"], "covs", model_args["model_name"], cov_full_filename
+        ),
+        "wb",
+    ) as f:
         pickle.dump(models_covs_list, f)
 
 
@@ -264,7 +269,12 @@ def normalize_covs(model_args):
 
     cov_full_filename = model_args["covs_filename"] + ".pkl"
 
-    with open(os.path.join(DIRS["result_path"], cov_full_filename), "rb") as f:
+    with open(
+        os.path.join(
+            DIRS["result_path"], "covs", model_args["model_name"], cov_full_filename
+        ),
+        "rb",
+    ) as f:
         covs_dicts = pickle.load(f)
 
     covs = []
@@ -275,7 +285,9 @@ def normalize_covs(model_args):
     covs = np.stack(covs)
     covs = covs.reshape(covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3])
 
-    for noise_b in tqdm.tqdm(model_args["noise_bs"], desc="Noise_Levels", position=1):
+    for noise_b in tqdm.tqdm(
+        model_args["noise_bs"], desc="Noise_Levels - Normalize Covs", position=1
+    ):
 
         normed_cov_full_filename = (
             model_args["covs_filename"]
@@ -286,20 +298,29 @@ def normalize_covs(model_args):
             + ".npy"
         )
 
-        b = noise_b[0] / noise_b[1]
-        noise_level = model_args["num_ims"] * b / (1 + (model_args["num_ims"] * b))
-
-        print(
-            f"Normalized covariance file {normed_cov_full_filename} has the noise level = {noise_level}"
+        file_path = os.path.join(
+            DIRS["result_path"],
+            "covs",
+            model_args["model_name"],
+            normed_cov_full_filename,
         )
 
-        normalized_covs = bc.cov_utils.cov_trace_norm_sigma_N(
-            covs, noise_var=noise_level
-        )
+        if Path(file_path).exists():
+            print(f"File at {file_path} already exists.")
 
-        np.save(
-            os.path.join(DIRS["result_path"], normed_cov_full_filename), normalized_covs
-        )
+        else:
+            b = noise_b[0] / noise_b[1]
+            noise_level = model_args["num_ims"] * b / (1 + (model_args["num_ims"] * b))
+
+            print(
+                f"Normalized covariance file {normed_cov_full_filename} has the noise level = {noise_level}"
+            )
+
+            normalized_covs = bc.cov_utils.cov_trace_norm_sigma_N(
+                covs, noise_var=noise_level
+            )
+
+            np.save(file_path, normalized_covs)
 
 
 def compute_dists(model_args):
@@ -311,15 +332,20 @@ def compute_dists(model_args):
 
     # Get the list of covs with bvals in their names. Those are the ones that were normalized.
     covs_filename_list = get_normed_cov_files(
-        DIRS["result_path"], model_args["covs_filename"]
+        os.path.join(DIRS["result_path"], "covs", model_args["model_name"]),
+        model_args["covs_filename"],
     )
 
     # In a for loop iterate through them to compute distances out of them.
-    for cov_filename in tqdm.tqdm(covs_filename_list, desc="Noise Levels", position=1):
+    for cov_filename in tqdm.tqdm(covs_filename_list, desc="Noise Levels - Dists", position=1):
         print(f"Computations for the cov file {cov_filename} has started.")
         bc.measure_dist_parallel(
-            covs_dir=os.path.join(DIRS["result_path"], cov_filename),
-            output_dir=os.path.join(DIRS["result_path"]),
+            covs_dir=os.path.join(
+                DIRS["result_path"], "covs", model_args["model_name"], cov_filename
+            ),
+            output_dir=os.path.join(
+                DIRS["result_path"], "dists", model_args["model_name"]
+            ),
             meas_name=model_args["measures"],
         )
 
