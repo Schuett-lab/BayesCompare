@@ -56,7 +56,10 @@ def load_trained_model(model_name, model_dir, device="cpu"):
     model = torchvision.models.get_model(model_name, weights=None).to(
         torch.device(device)
     )
-    model.load_state_dict(snapshot["model"])
+    if model_name == "resnet50" and ("333" in model_dir or "128" in model_dir):
+        model.load_state_dict(snapshot["model_state"])
+    else:
+        model.load_state_dict(snapshot["model"])
 
     # should it be in eval mode? It should be discussed!
     return model.eval()
@@ -101,7 +104,7 @@ def get_model_weights(model_weights_name):
     return weights
 
 
-def get_normed_cov_files(covs_dir):
+def get_normed_cov_files(covs_dir, cov_filename):
     """
     Gets the list of filenames of normalized covariance files. Those are the
     ones which has "bval" in their filenames.
@@ -118,7 +121,7 @@ def get_normed_cov_files(covs_dir):
     dir_path = Path(covs_dir)
 
     # covs_<anything>_bval_<number>_<number>.npy
-    pattern = re.compile(r"^covs_.*_bval_([0-9]+)_([0-9]+)\.npy$")
+    pattern = re.compile(rf"^{cov_filename}_bval_([0-9]+)_([0-9]+)\.npy$")
 
     normed_cov_filenames = []
 
@@ -307,10 +310,13 @@ def compute_dists(model_args):
     """
 
     # Get the list of covs with bvals in their names. Those are the ones that were normalized.
-    covs_filename_list = get_normed_cov_files(DIRS["result_path"])
+    covs_filename_list = get_normed_cov_files(
+        DIRS["result_path"], model_args["covs_filename"]
+    )
 
     # In a for loop iterate through them to compute distances out of them.
     for cov_filename in tqdm.tqdm(covs_filename_list, desc="Noise Levels", position=1):
+        print(f"Computations for the cov file {cov_filename} has started.")
         bc.measure_dist_parallel(
             covs_dir=os.path.join(DIRS["result_path"], cov_filename),
             output_dir=os.path.join(DIRS["result_path"]),
