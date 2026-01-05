@@ -68,7 +68,7 @@ def _hellinger_numpy(sigma1, sigma2, mu1=None, mu2=None):
 
     d_B = _bhattacharyya_numpy(sigma1, sigma2, mu1, mu2)
 
-    d_sq = 2 * (1 - np.exp(d_B))
+    d_sq = 2 * (1 - np.exp(-d_B))
 
     d_sq = prevent_negative_square(d_sq, "Hellinger")
 
@@ -79,7 +79,7 @@ def _hellinger_torch(sigma1, sigma2, mu1=None, mu2=None):
 
     d_B = _bhattacharyya_torch(sigma1, sigma2, mu1, mu2)
 
-    d_sq = 2 * (1 - torch.exp(d_B))
+    d_sq = 2 * (1 - torch.exp(-d_B))
 
     d_sq = prevent_negative_square(d_sq, "Hellinger")
 
