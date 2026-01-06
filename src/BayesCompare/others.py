@@ -18,20 +18,33 @@ import tqdm
 def _cka_np(K1, K2):
     """centred kernel alignment"""
     # centering
-    K1 = K1 - np.mean(K1, 0, keepdims=True)
-    K2 = K2 - np.mean(K2, 0, keepdims=True)
-    return np.sum(K1 * K2) / np.sqrt(np.sum(K1 * K1)) / np.sqrt(np.sum(K2 * K2))
+    K1_centered = (
+        K1 - K1.mean(axis=1, keepdims=True) - K1.mean(axis=0, keepdims=True) + K1.mean()
+    )
+    K2_centered = (
+        K2 - K2.mean(axis=1, keepdims=True) - K2.mean(axis=0, keepdims=True) + K2.mean()
+    )
+
+    return (
+        np.sum(K1_centered * K2_centered)
+        / np.sqrt(np.sum(K1_centered * K1_centered))
+        / np.sqrt(np.sum(K2_centered * K2_centered))
+    )
 
 
 def _cka_torch(K1, K2):
     """centred kernel alignment"""
     # centering
-    K1 = K1 - torch.mean(K1, 0, keepdim=True)
-    K2 = K2 - torch.mean(K2, 0, keepdim=True)
+    K1_centered = (
+        K1 - K1.mean(dim=1, keepdim=True) - K1.mean(dim=0, keepdim=True) + K1.mean()
+    )
+    K2_centered = (
+        K2 - K2.mean(dim=1, keepdim=True) - K2.mean(dim=0, keepdim=True) + K2.mean()
+    )
     return (
-        torch.sum(K1 * K2)
-        / torch.sqrt(torch.sum(K1 * K1))
-        / torch.sqrt(torch.sum(K2 * K2))
+        torch.sum(K1_centered * K2_centered)
+        / torch.sqrt(torch.sum(K1_centered * K1_centered))
+        / torch.sqrt(torch.sum(K2_centered * K2_centered))
     )
 
 
