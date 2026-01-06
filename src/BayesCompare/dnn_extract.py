@@ -122,7 +122,7 @@ def get_layer_names(model: torch.nn.Module, get_graph: Optional[str] = "none"):
             model,
             mock_input,
             layers_to_save=None,
-            vis_opt="none",
+            vis_opt=get_graph,
             detach_saved_tensors=True,
         )
 
