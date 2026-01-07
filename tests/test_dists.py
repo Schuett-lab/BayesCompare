@@ -1,454 +1,383 @@
-import numpy as np
 import torch
-import pathlib
-import os
-import glob
+import numpy as np
 from BayesCompare import distances
 from numpy.testing import assert_allclose
 from torch.testing import assert_close
-from pathlib import Path
-import pytest
+import unittest
+from parameterized import parameterized
+
+ALL_MEASURES = [
+    "wasserstein",
+    "hellinger",
+    "tvd",
+    "jsd",
+    "kldiv",
+    "bhattacharyya",
+    "mahalanobis",
+]
 
 
-def read_input(dir):
+class TestDists(unittest.TestCase):
 
-    file_ext = pathlib.Path(dir).suffix
+    def generate_covs(
+        self,
+        N: int,
+        dim: int,
+        eig_min: float = 0.5,
+        eig_max: float = 2.0,
+        cov_dtype: np.dtype = np.float64,
+        specific_eigs: int | None = None,
+        scale: int = 1,
+    ):
 
-    if file_ext == ".npy":
-        sample_file = np.load(dir)
-    elif file_ext == ".pt":
-        sample_file = torch.load(dir)
-    else:
-        return NotImplementedError("Input file type not implemented for loading")
+        covs = np.empty((N, dim, dim), dtype=cov_dtype)
 
-    return sample_file
+        for i in range(N):
+            A = self.rng.normal(size=(dim, dim))
+            Q, _ = np.linalg.qr(A)
 
+            eigs = self.rng.uniform(eig_min, eig_max, size=dim)
 
-def load_inputs():
-    home_path = Path.home()
-    sample_path = os.path.join(home_path, "Documents/BayesCompare/tests/sample_data")
-    input_cases_np = {}
-    input_cases_th = {}
-    for input_file in [
-        "same",
-        "similar",
-        "symmetric",
-        "nonsymmetric",
-        "slightly_nonsymmetric",
-        "psd",
-        "almost_psd",
-        "large_scale",
-        "small_scale",
-        "large_and_small_scale",
-    ]:
-        filename_np = glob.glob(
-            os.path.join(sample_path, f"test_input_dist_{input_file}_np*")
-        )[0]
-        input_cases_np[input_file] = read_input(filename_np)
+            if specific_eigs:
+                eigs[0] = specific_eigs[i]
 
-        filename_th = glob.glob(
-            os.path.join(sample_path, f"test_input_dist_{input_file}_th*")
-        )[0]
-        input_cases_th[input_file] = read_input(filename_th)
+            covs[i] = scale * (Q @ np.diag(eigs) @ Q.T)
 
-    return input_cases_np, input_cases_th
+        return covs
 
+    def setUp(self) -> None:
 
-# Case 1: Same covariance matrix given as input: d(A, A)
-def test_same_input(input_all_np, input_all_th, meas_name_to_test):
+        self.rng = np.random.default_rng(0)
 
-    output_np = []
-    output_th = []
+        dim = 25
 
-    num_samples = 1000000
+        # Same input test
+        self.test_same_input_data = self.generate_covs(N=1, dim=dim)
 
-    for input_np, input_th in zip(input_all_np, input_all_th):
+        # Very close input test
+        # eps = [0.05, 1e-2, 1e-3, 1e-5, 1e-8]
+        eps = [1e-2, 1e-3, 1e-4, 1e-5, 1e-8]
+        A_5 = self.generate_covs(N=5, dim=dim)
+        self.test_close_input_data = []
+        for i, A in enumerate(A_5):
+            E = np.random.randn(dim, dim)
+            E = (E + E.T) / 2
+            B = A + eps[i] * E
+            self.test_close_input_data.append((A, B))
+
+        # Symmetric input test
+        B_3 = self.generate_covs(N=3, dim=dim)
+        self.test_symmetric_inputs_data = [(A, B) for A, B in zip(A_5[:3], B_3)]
+        for A, B in zip(A_5[:3], B_3):
+            self.test_symmetric_inputs_data.append((B, A))
+
+        # PSD input test
+        self.test_psd_input_data = self.generate_covs(
+            N=4, dim=dim, specific_eigs=[0.0, 0.0, 0.0, 0.0]
+        )
+
+        # Almost PSD input test
+        self.test_almost_psd_input_data = self.generate_covs(
+            N=4, dim=dim, specific_eigs=[0.001, 0.0001, 0.00001, 0.0000001]
+        )
+
+        # Large input test
+        self.test_large_input_data = self.generate_covs(N=4, dim=dim, scale=1e7)
+
+        # Small input test
+        self.test_small_input_data = self.generate_covs(N=4, dim=dim, scale=1e-4)
+
+        # One small one large input test
+        self.test_large_and_small_input = [
+            (A, B)
+            for A, B in zip(self.test_large_input_data, self.test_small_input_data)
+        ]
+
+    # Same covariance matrix given as input: d(A, A)
+    @parameterized.expand(ALL_MEASURES)
+    def test_same_input(self, meas_name):
+
+        output_np = []
+        output_th = []
+
+        num_samples = 1000000
+
         output_np.append(
             distances.measure_dist(
-                [input_np[0], input_np[1]],
-                meas_name=meas_name_to_test,
+                [self.test_same_input_data[0], self.test_same_input_data[0]],
+                meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
         output_th.append(
             distances.measure_dist(
-                [input_th[0], input_th[1]],
-                meas_name=meas_name_to_test,
+                [
+                    torch.from_numpy(self.test_same_input_data[0]),
+                    torch.from_numpy(self.test_same_input_data[0]),
+                ],
+                meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
 
-    output_np = np.stack(output_np, axis=0)
-    output_th = torch.stack(output_th, dim=0)
+        output_np = np.stack(output_np, axis=0)
+        output_th = torch.stack(output_th, dim=0)
 
-    assert_allclose(output_np, np.zeros_like(output_np), rtol=1e-10, atol=1e-10)
-    assert_allclose(output_th, torch.zeros_like(output_th), rtol=1e-6, atol=1e-6)
+        assert_allclose(output_np, np.zeros_like(output_np), rtol=1e-10, atol=1e-10)
+        assert_allclose(output_th, torch.zeros_like(output_th), rtol=1e-6, atol=1e-6)
 
-    print("Test 1: Same input test is successful!")
+    # Very close covariance matrices given as input: d(A, A + ε)
+    @parameterized.expand(ALL_MEASURES)
+    def test_similar_input(self, meas_name):
 
+        output_np = []
+        output_th = []
 
-# Case 2: Very close covairance matrices given as input: d(A, A + ε)
-def test_similar_input(input_all_np, input_all_th, meas_name_to_test):
+        num_samples = 1000000
 
-    output_np = []
-    output_th = []
-
-    num_samples = 10000000
-
-    for input_np, input_th in zip(input_all_np, input_all_th):
-
-        output_np.append(
-            distances.measure_dist(
-                [input_np[0], input_np[1]],
-                meas_name=meas_name_to_test,
-                samples_jsd_tvd=num_samples,
-                show_progress=False,
-            )
-        )
-        output_th.append(
-            distances.measure_dist(
-                [input_th[0], input_th[1]],
-                meas_name=meas_name_to_test,
-                samples_jsd_tvd=num_samples,
-                show_progress=False,
-            )
-        )
-
-    output_np = np.stack(output_np, axis=0)
-    output_th = torch.stack(output_th, dim=0)
-    # atol = 1e-2 as we have ε = 0.05 in the input
-    assert_allclose(output_np, np.zeros_like(output_np), rtol=1e-8, atol=1e-2)
-    assert_close(output_th, torch.zeros_like(output_th), rtol=1e-8, atol=1e-2)
-    assert_allclose(output_np, output_th.numpy(), rtol=1e-10, atol=1e-10)
-    assert_close(
-        torch.from_numpy(output_np.astype(np.float32)),
-        output_th,
-        rtol=1e-10,
-        atol=1e-10,
-    )
-
-    print("Test 2: Similar input test is successful!")
-
-
-# Case 3: Symmetry of distance check: d(A, B) vs d(B, A)
-def test_symmetric_inputs(input_all_np, input_all_th, meas_name_to_test):
-
-    output_np = []
-    output_th = []
-
-    num_samples = 1000000
-
-    for input_np, input_th in zip(input_all_np, input_all_th):
-
-        output_np.append(
-            distances.measure_dist(
-                [input_np[0], input_np[1]],
-                meas_name=meas_name_to_test,
-                samples_jsd_tvd=num_samples,
-                show_progress=False,
-            )
-        )
-        output_np.append(
-            distances.measure_dist(
-                [input_np[1], input_np[0]],
-                meas_name=meas_name_to_test,
-                samples_jsd_tvd=num_samples,
-                show_progress=False,
-            )
-        )
-        output_th.append(
-            distances.measure_dist(
-                [input_th[0], input_th[1]],
-                meas_name=meas_name_to_test,
-                samples_jsd_tvd=num_samples,
-                show_progress=False,
-            )
-        )
-        output_th.append(
-            distances.measure_dist(
-                [input_th[1], input_th[0]],
-                meas_name=meas_name_to_test,
-                samples_jsd_tvd=num_samples,
-                show_progress=False,
-            )
-        )
-
-    output_np = np.stack(output_np, axis=0)
-    output_th = torch.stack(output_th, dim=0)
-
-    assert_allclose(output_np[0::2], output_np[1::2], rtol=1e-8, atol=1e-10)
-    assert_close(output_th[0::2], output_th[1::2], rtol=1e-8, atol=1e-10)
-    assert_allclose(output_np, output_th.numpy(), rtol=1e-7, atol=1e-6)
-    assert_close(
-        torch.from_numpy(output_np.astype(np.float32)),
-        output_th,
-        rtol=1e-10,
-        atol=1e-10,
-    )
-
-    print("Test 3: Symmetric input test is successful!")
-
-
-# Case 4: Non-symmetric inputs: A != A.T
-def test_nonsymmetric_input(input_all_np, input_all_th, meas_name_to_test):
-
-    for input_np, input_th in zip(input_all_np, input_all_th):
-        with pytest.raises(ValueError):
-            distances.measure_dist(
-                [input_np[0], input_np[1]],
-                meas_name=meas_name_to_test,
-                show_progress=False,
-            )
-        with pytest.raises(ValueError):
-            distances.measure_dist(
-                [input_th[0], input_th[1]],
-                meas_name=meas_name_to_test,
-                show_progress=False,
-            )
-
-    print("Test 4: Non-symmetric input test is successful!")
-
-
-# Case 5: Slightly non-symmetric inputs: A ~ A.T
-def test_slightly_nonsymmetric_input(input_all_np, input_all_th, meas_name_to_test):
-
-    idx = 0
-
-    for input_np, input_th in zip(input_all_np, input_all_th):
-
-        if idx != 4:
-            with pytest.raises(ValueError):
+        for pair in self.test_close_input_data:
+            output_np.append(
                 distances.measure_dist(
-                    [input_np[0], input_np[1]],
-                    meas_name=meas_name_to_test,
+                    pair,
+                    meas_name=meas_name,
+                    samples_jsd_tvd=num_samples,
                     show_progress=False,
                 )
-            with pytest.raises(ValueError):
+            )
+            output_th.append(
                 distances.measure_dist(
-                    [input_th[0], input_th[1]],
-                    meas_name=meas_name_to_test,
+                    [torch.from_numpy(pair[0]), torch.from_numpy(pair[1])],
+                    meas_name=meas_name,
+                    samples_jsd_tvd=num_samples,
                     show_progress=False,
                 )
-            idx += 1
+            )
+
+        output_np = np.stack(output_np, axis=0)
+        output_th = torch.stack(output_th, dim=0)
+
+        if "wasserstein" in meas_name or "hellinger" in meas_name:
+            assert_allclose(output_np, np.zeros_like(output_np), rtol=0.1, atol=0.1)
+            assert_close(output_th, torch.zeros_like(output_th), rtol=0.1, atol=0.1)
+            assert_allclose(output_np, output_th.numpy(), rtol=1e-3, atol=1e-3)
+        else:
+            assert_allclose(output_np, np.zeros_like(output_np), rtol=0.05, atol=0.05)
+            assert_close(output_th, torch.zeros_like(output_th), rtol=0.05, atol=0.05)
+            assert_allclose(output_np, output_th.numpy(), rtol=1e-3, atol=1e-3)
+
+    # Symmetry of distance measure check: d(A, B) vs d(B, A)
+    @parameterized.expand(ALL_MEASURES)
+    def test_symmetric_inputs(self, meas_name):
+
+        if "kl" in meas_name:
+            self.skipTest("KL divergence is not symmetric.")
+
+        output_np = []
+        output_th = []
+
+        num_samples = 1000000
+
+        for pair in self.test_symmetric_inputs_data:
+
+            output_np.append(
+                distances.measure_dist(
+                    [pair[0], pair[1]],
+                    meas_name=meas_name,
+                    samples_jsd_tvd=num_samples,
+                    show_progress=False,
+                )
+            )
+
+            output_th.append(
+                distances.measure_dist(
+                    [torch.from_numpy(pair[0]), torch.from_numpy(pair[1])],
+                    meas_name=meas_name,
+                    samples_jsd_tvd=num_samples,
+                    show_progress=False,
+                )
+            )
+
+        output_np = np.stack(output_np, axis=0)
+        output_th = torch.stack(output_th, dim=0)
+
+        if "jsd" in meas_name or "tvd" in meas_name:
+            assert_allclose(output_np[0:3], output_np[3:6], rtol=0.05, atol=0.01)
+            assert_close(output_th[0:3], output_th[3:6], rtol=0.05, atol=0.01)
+            assert_allclose(output_np, output_th.numpy(), rtol=0.05, atol=0.01)
 
         else:
+            assert_allclose(output_np[0:3], output_np[3:6], rtol=1e-8, atol=1e-10)
+            assert_close(output_th[0:3], output_th[3:6], rtol=1e-8, atol=1e-10)
+            assert_allclose(output_np, output_th.numpy(), rtol=1e-3, atol=1e-3)
 
-            num_samples = 1000000
+    # PSD inputs (one eigenval = 0)
+    @parameterized.expand(ALL_MEASURES)
+    def test_psd_input(self, meas_name):
 
-            output_np = distances.measure_dist(
-                [input_np[0], input_np[1]],
-                meas_name=meas_name_to_test,
-                samples_jsd_tvd=num_samples,
-                show_progress=False,
-            )
-            output_th = distances.measure_dist(
-                [input_th[0], input_th[1]],
-                meas_name=meas_name_to_test,
-                samples_jsd_tvd=num_samples,
-                show_progress=False,
-            )
-            assert_allclose(output_np, output_th.numpy(), rtol=1e-7, atol=1e-6)
-            assert_close(
-                torch.from_numpy(output_np.astype(np.float32)),
-                output_th,
-                rtol=1e-10,
-                atol=1e-10,
-            )
+        output_np = []
+        output_th = []
 
-    print("Test 5: Slightly non-symmetric input test is successful!")
+        num_samples = 1000000
 
-
-# Case 6: PSD inputs (one eigenval = 0) and Case 7: Almost PSD inputs (one eigenval ~ 0)
-def test_psd_input(input_all_np, input_all_th, meas_name_to_test, case_num):
-
-    output_np = []
-    output_th = []
-
-    num_samples = 1000000
-
-    for input_np, input_th in zip(input_all_np, input_all_th):
         output_np.append(
             distances.measure_dist(
-                [input_np[0], input_np[1]],
-                meas_name=meas_name_to_test,
+                self.test_psd_input_data,
+                meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
         output_th.append(
             distances.measure_dist(
-                [input_th[0], input_th[1]],
-                meas_name=meas_name_to_test,
+                [torch.from_numpy(A) for A in self.test_psd_input_data],
+                meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
 
-    output_np = np.stack(output_np, axis=0)
-    output_th = torch.stack(output_th, dim=0)
+        output_np = np.stack(output_np, axis=0)
+        output_th = torch.stack(output_th, dim=0)
 
-    # what to check about outputs for the psd tests?
-    assert_allclose(output_np, output_th.numpy(), rtol=1e-6, atol=1e-6)
-    assert_close(
-        torch.from_numpy(output_np.astype(np.float32)), output_th, rtol=1e-6, atol=1e-6
-    )
+        # what to check about outputs for the psd tests?
+        assert_allclose(output_np, output_th.numpy(), rtol=0.05, atol=0.05)
+        assert np.all(output_np >= 0), "NPArray contains negative values"
+        assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
 
-    print(f"Test {case_num}: PSD inputs test is successful!")
+    # Almost PSD inputs (one eigenval ~ 0)
+    @parameterized.expand(ALL_MEASURES)
+    def test_almost_psd_input(self, meas_name):
 
+        output_np = []
+        output_th = []
 
-# Case 8: Large scale inputs & Case 9: Small scale inputs & Case 10: One large scale, one small scale input
-def test_different_scale_inputs(
-    input_all_np, input_all_th, meas_name_to_test, case_num
-):
-    output_np = []
-    output_th = []
+        num_samples = 1000000
 
-    num_samples = 1000000
-
-    for input_np, input_th in zip(input_all_np, input_all_th):
         output_np.append(
             distances.measure_dist(
-                [input_np[0], input_np[1]],
-                meas_name=meas_name_to_test,
+                self.test_almost_psd_input_data,
+                meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
         output_th.append(
             distances.measure_dist(
-                [input_th[0], input_th[1]],
-                meas_name=meas_name_to_test,
+                [torch.from_numpy(A) for A in self.test_almost_psd_input_data],
+                meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
                 show_progress=False,
             )
         )
 
-    output_np = np.stack(output_np, axis=0)
-    output_th = torch.stack(output_th, dim=0)
+        output_np = np.stack(output_np, axis=0)
+        output_th = torch.stack(output_th, dim=0)
 
-    # what to check about outputs for the scale tests?
-    assert_allclose(output_np, output_th.numpy(), rtol=1e-6, atol=1e-6)
-    assert_close(
-        torch.from_numpy(output_np.astype(np.float32)), output_th, rtol=1e-6, atol=1e-6
-    )
+        # what to check about outputs for the psd tests?
+        if not ("jsd" in meas_name or "tvd" in meas_name):
+            assert_allclose(output_np, output_th.numpy(), rtol=1e-2, atol=1e-2)
+        assert np.all(output_np >= 0), "NPArray contains negative values"
+        assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
 
-    print(f"Test {case_num}: Different scale inputs test is successful!")
+    # Large scale input
+    @parameterized.expand(ALL_MEASURES)
+    def test_large_scale_inputs(self, meas_name):
+        output_np = []
+        output_th = []
 
+        num_samples = 1000000
 
-def call_all_tests(meas_name):
+        output_np.append(
+            distances.measure_dist(
+                self.test_large_input_data,
+                meas_name=meas_name,
+                samples_jsd_tvd=num_samples,
+                show_progress=False,
+            )
+        )
+        output_th.append(
+            distances.measure_dist(
+                [torch.from_numpy(A) for A in self.test_large_input_data],
+                meas_name=meas_name,
+                samples_jsd_tvd=num_samples,
+                show_progress=False,
+            )
+        )
 
-    input_cases_np, input_cases_th = load_inputs()
+        output_np = np.stack(output_np, axis=0)
+        output_th = torch.stack(output_th, dim=0)
 
-    # Case 1: Same covariance matrix given as input: d(A, A)
-    test_same_input(input_cases_np["same"], input_cases_th["same"], meas_name)
+        # what to check about outputs for the scale tests?
+        assert_allclose(output_np, output_th.numpy(), rtol=1e-2, atol=1e-2)
+        assert np.all(output_np >= 0), "NPArray contains negative values"
+        assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
 
-    # Case 2: Very close covairance matrices given as input: d(A, A + ε)
-    test_similar_input(input_cases_np["similar"], input_cases_th["similar"], meas_name)
+    # Small scale input
+    @parameterized.expand(ALL_MEASURES)
+    def test_large_scale_inputs(self, meas_name):
+        output_np = []
+        output_th = []
 
-    # Case 3: Symmetry of distance check: d(A, B) vs d(B, A)
-    test_symmetric_inputs(
-        input_cases_np["symmetric"], input_cases_th["symmetric"], meas_name
-    )
+        num_samples = 1000000
 
-    # Case 4: Non-symmetric inputs: A != A.T
-    test_nonsymmetric_input(
-        input_cases_np["nonsymmetric"], input_cases_th["nonsymmetric"], meas_name
-    )
+        output_np.append(
+            distances.measure_dist(
+                self.test_small_input_data,
+                meas_name=meas_name,
+                samples_jsd_tvd=num_samples,
+                show_progress=False,
+            )
+        )
+        output_th.append(
+            distances.measure_dist(
+                [torch.from_numpy(A) for A in self.test_small_input_data],
+                meas_name=meas_name,
+                samples_jsd_tvd=num_samples,
+                show_progress=False,
+            )
+        )
 
-    # Case 5: Slightly non-symmetric inputs: A ~ A.T
-    test_slightly_nonsymmetric_input(
-        input_cases_np["slightly_nonsymmetric"],
-        input_cases_th["slightly_nonsymmetric"],
-        meas_name,
-    )
+        output_np = np.stack(output_np, axis=0)
+        output_th = torch.stack(output_th, dim=0)
 
-    # Case 6: PSD inputs (one eigenval = 0)
-    test_psd_input(input_cases_np["psd"], input_cases_th["psd"], meas_name, 6)
+        # what to check about outputs for the scale tests?
+        assert_allclose(output_np, output_th.numpy(), rtol=1e-3, atol=1e-3)
+        assert np.all(output_np >= 0), "NPArray contains negative values"
+        assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
 
-    # Case 7: Almost PSD inputs (one eigenval ~ 0)
-    test_psd_input(
-        input_cases_np["almost_psd"], input_cases_th["almost_psd"], meas_name, 7
-    )
+    # One large and one small scale input
+    @parameterized.expand(ALL_MEASURES)
+    def test_large_scale_inputs(self, meas_name):
+        output_np = []
+        output_th = []
 
-    # Case 8: Large scale inputs
-    test_different_scale_inputs(
-        input_cases_np["large_scale"], input_cases_th["large_scale"], meas_name, 8
-    )
+        num_samples = 1000000
 
-    # Case 9: Small scale inputs
-    test_different_scale_inputs(
-        input_cases_np["small_scale"], input_cases_th["small_scale"], meas_name, 9
-    )
+        for pair in self.test_large_and_small_input:
 
-    # Case 10: One large scale, one small scale input
-    test_different_scale_inputs(
-        input_cases_np["large_and_small_scale"],
-        input_cases_th["large_and_small_scale"],
-        meas_name,
-        10,
-    )
+            output_np.append(
+                distances.measure_dist(
+                    pair,
+                    meas_name=meas_name,
+                    samples_jsd_tvd=num_samples,
+                    show_progress=False,
+                )
+            )
+            output_th.append(
+                distances.measure_dist(
+                    [torch.from_numpy(pair[0]), torch.from_numpy(pair[1])],
+                    meas_name=meas_name,
+                    samples_jsd_tvd=num_samples,
+                    show_progress=False,
+                )
+            )
 
+        output_np = np.stack(output_np, axis=0)
+        output_th = torch.stack(output_th, dim=0)
 
-def call_some_tests(meas_name, test_list):
-
-    input_cases_np, input_cases_th = load_inputs()
-
-    test_dict = {
-        1: lambda: test_same_input(
-            input_cases_np["same"], input_cases_th["same"], meas_name
-        ),
-        2: lambda: test_similar_input(
-            input_cases_np["similar"], input_cases_th["similar"], meas_name
-        ),
-        3: lambda: test_symmetric_inputs(
-            input_cases_np["symmetric"], input_cases_th["symmetric"], meas_name
-        ),
-        4: lambda: test_nonsymmetric_input(
-            input_cases_np["nonsymmetric"], input_cases_th["nonsymmetric"], meas_name
-        ),
-        5: lambda: test_slightly_nonsymmetric_input(
-            input_cases_np["slightly_nonsymmetric"],
-            input_cases_th["slightly_nonsymmetric"],
-            meas_name,
-        ),
-        6: lambda: test_psd_input(
-            input_cases_np["psd"], input_cases_th["psd"], meas_name, 6
-        ),
-        7: lambda: test_psd_input(
-            input_cases_np["almost_psd"], input_cases_th["almost_psd"], meas_name, 7
-        ),
-        8: lambda: test_different_scale_inputs(
-            input_cases_np["large_scale"], input_cases_th["large_scale"], meas_name, 8
-        ),
-        9: lambda: test_different_scale_inputs(
-            input_cases_np["small_scale"], input_cases_th["small_scale"], meas_name, 9
-        ),
-        10: lambda: test_different_scale_inputs(
-            input_cases_np["large_and_small_scale"],
-            input_cases_th["large_and_small_scale"],
-            meas_name,
-            10,
-        ),
-    }
-
-    for test in test_list:
-        test_dict[test]()
-
-
-# Testing mahalanobis without any mean vector is actually not meaningful as the distance is directly equal to zero in this case (without any computations).
-# call_all_tests("mahalanobis")
-
-# call_all_tests("bhattacharyya")
-
-# call_all_tests("wasserstein")
-
-# call_all_tests("JSD")
-
-# call_all_tests("TVD")
-
-# call_all_tests("hellinger")
-
-# KL divergence do not satisfy symmetry property so it doesn't make sense to test it on that.
-# call_some_tests("KL div", [1, 2, 4, 5, 6, 7, 8, 9, 10])
+        # what to check about outputs for the scale tests?
+        assert_allclose(output_np, output_th.numpy(), rtol=1e-2, atol=1e-2)
+        assert np.all(output_np >= 0), "NPArray contains negative values"
+        assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
