@@ -11,7 +11,7 @@ def get_dirs():
     if "u103388" in cwd:
         dirs = {
             "checkpoint_main_path": "/project/home/p201045/outputs/",
-            "input_images": "/project/scratch/p201045/model-compare/mscoco/",
+            "input_images": "/project/scratch/p201045/model-compare/images/",
             "result_path": "/project/scratch/p201045/model-compare/results/",
             "figure_path": "/project/scratch/p201045/model-compare/figures/",
             "configs_path": "/home/users/u103388/BayesCompare/config_files/",

@@ -14,6 +14,8 @@ from pathlib import Path
 from system_dirs import get_dirs
 
 
+DIRS = get_dirs()
+
 # Helper functions
 
 
@@ -104,7 +106,7 @@ def get_model_weights(model_weights_name):
     return weights
 
 
-def get_normed_cov_files(covs_dir, cov_filename):
+def get_normed_cov_files(covs_dir, cov_filename, imseed, N):
     """
     Gets the list of filenames of normalized covariance files. Those are the
     ones which has "bval" in their filenames.
@@ -120,8 +122,8 @@ def get_normed_cov_files(covs_dir, cov_filename):
 
     dir_path = Path(covs_dir)
 
-    # covs_<anything>_bval_<number>_<number>.npy
-    pattern = re.compile(rf"^{cov_filename}_bval_([0-9]+)_([0-9]+)\.npy$")
+    # covs_<something>_imseed_<number>_N_<number>_bval_<number>.npy
+    pattern = re.compile(rf"^{cov_filename}_imseed_{imseed}_N_{N}_bval_\d+\.npy$")
 
     normed_cov_filenames = []
 
@@ -138,39 +140,92 @@ def get_normed_cov_files(covs_dir, cov_filename):
     return normed_cov_filenames
 
 
+def get_seed_from_filename(filename):
+    pattern = re.compile(r"seed_(\d+)_N_\d+\.txt$")
+    m = pattern.match(filename)
+    if m:
+        seed = int(m.group(1))
+        return seed
+    else:
+        raise ValueError(f"Invalid filename format: {filename}")
+
+
+def save_im_filenames(selected_files, seed, N, im_folder):
+
+    output_txt_filename = "image_filenames_seed_" + str(seed) + "_N_" + str(N) + ".txt"
+
+    output_txt_path = os.path.join(im_folder, "im_filename_files", output_txt_filename)
+
+    if Path(output_txt_path).exists():
+        raise FileExistsError(f"{output_txt_path} already exists")
+
+    print(f"Image filename list is saved at {output_txt_path}")
+    with open(output_txt_path, "w") as f:
+        for name in selected_files:
+            f.write(name + "\n")
+
+
 # Process functions
 
-DIRS = get_dirs()
 
-
-def load_ims(model_weights_name, num_ims):
+def load_ims(model_args):
     """
     Loads the images from which the covariance matrices will be calculated.
 
     Parameters
     ----------
-    model_weights_name (str): Model weights name as used for the PyTorch Vision Models.
-    num_ims (int): Number of images that will be used for covariance calculation.
+    model_args (dict): A dictionary consisting the parameters for input image filename directory/seed and number of images.
 
     Returns
     -------
     act_ims (list[torch.Tensor]): A list of transformed images.
     """
 
+    ims_filename_file = model_args.get("ims_filename_file", None)
+
     im_folder = os.path.join(DIRS["input_images"])
-    file_names = os.listdir(im_folder)
 
-    N = num_ims
-    ims = [PIL.Image.open(os.path.join(im_folder, f_name)) for f_name in file_names[:N]]
+    N = model_args["num_ims"]
 
-    weights = get_model_weights(model_weights_name)
+    if ims_filename_file == None:
+        print("Ims filename is empty")
+
+        seed = model_args.get(
+            "ims_seed", np.random.SeedSequence().generate_state(1, dtype=np.uint32)[0]
+        )
+
+        print(f"Created seed is {seed}")
+
+        rng = np.random.default_rng(seed)
+
+        all_file_names = os.listdir(im_folder + "/mscoco/")
+
+        print(f"Length of all files is {len(all_file_names)}")
+
+        selected_files = rng.choice(all_file_names, size=N, replace=False)
+
+        save_im_filenames(selected_files, seed, N, im_folder)
+
+    else:
+
+        with open(ims_filename_file) as f:
+            selected_files = [line.strip() for line in f]
+
+        seed = get_seed_from_filename(ims_filename_file)
+
+    ims = [
+        PIL.Image.open(os.path.join(im_folder, "mscoco", f_name))
+        for f_name in selected_files
+    ]
+
+    weights = get_model_weights(model_args["model_weights_name"])
 
     transforms = weights.transforms()
 
     transformed_ims = [transforms(im.convert("RGB")) for im in ims]
     act_ims = torch.stack(transformed_ims)
 
-    return act_ims
+    return act_ims, seed
 
 
 def load_models(model_args):
@@ -217,7 +272,7 @@ def load_models(model_args):
     return models
 
 
-def get_covs_from_models(models_list, input_ims, model_args):
+def get_covs_from_models(models_list, input_ims, im_seed, model_args):
     """
     Computes the covariance matrices from each model given the given model list and input images.
 
@@ -245,7 +300,16 @@ def get_covs_from_models(models_list, input_ims, model_args):
         models_covs_list.append(cov_dict)
 
     # Save the models_covs_list which have all the wanted activations for all models
-    cov_full_filename = model_args["covs_filename"] + ".pkl"
+    cov_full_filename = (
+        model_args["covs_filename"]
+        + "_imseed_"
+        + str(im_seed)
+        + "_N_"
+        + str(model_args["num_ims"])
+        + ".pkl"
+    )
+
+    print(f"Covariance filename is {cov_full_filename}")
 
     with open(
         os.path.join(
@@ -256,7 +320,7 @@ def get_covs_from_models(models_list, input_ims, model_args):
         pickle.dump(models_covs_list, f)
 
 
-def normalize_covs(model_args):
+def normalize_covs(model_args, im_seed):
     """
     Loads the saved covariance matrices and trace-normalizes them with adding noise.
     Saves them with the addition of noise level in the original filename.
@@ -267,11 +331,20 @@ def normalize_covs(model_args):
     number of images used for obtaining the covariance matrices and filename of the covariance matrices to be saved.
     """
 
-    cov_full_filename = model_args["covs_filename"] + ".pkl"
+    cov_full_filename = (
+        model_args["covs_filename"]
+        + "_imseed_"
+        + str(im_seed)
+        + "_N_"
+        + str(model_args["num_ims"])
+    )
 
     with open(
         os.path.join(
-            DIRS["result_path"], "covs", model_args["model_name"], cov_full_filename
+            DIRS["result_path"],
+            "covs",
+            model_args["model_name"],
+            cov_full_filename + ".pkl",
         ),
         "rb",
     ) as f:
@@ -290,12 +363,7 @@ def normalize_covs(model_args):
     ):
 
         normed_cov_full_filename = (
-            model_args["covs_filename"]
-            + "_bval_"
-            + str(noise_b[0])
-            + "_"
-            + str(noise_b[1])
-            + ".npy"
+            cov_full_filename + "_bval_" + str(noise_b[0]) + ".npy"
         )
 
         file_path = os.path.join(
@@ -305,11 +373,13 @@ def normalize_covs(model_args):
             normed_cov_full_filename,
         )
 
+        print(f"Normalized covariance filename is {file_path}")
+
         if Path(file_path).exists():
             print(f"File at {file_path} already exists.")
 
         else:
-            b = noise_b[0] / noise_b[1]
+            b = 1 / noise_b[0]
             noise_level = model_args["num_ims"] * b / (1 + (model_args["num_ims"] * b))
 
             print(
@@ -323,7 +393,7 @@ def normalize_covs(model_args):
             np.save(file_path, normalized_covs)
 
 
-def compute_dists(model_args):
+def compute_dists(model_args, imseed):
     """
     Computes the distances whose names are passed with `model_args` from the saved normalized covariance matrices.
 
@@ -331,13 +401,18 @@ def compute_dists(model_args):
     """
 
     # Get the list of covs with bvals in their names. Those are the ones that were normalized.
+    # (covs_dir, cov_filename, imseed, N)
     covs_filename_list = get_normed_cov_files(
         os.path.join(DIRS["result_path"], "covs", model_args["model_name"]),
         model_args["covs_filename"],
+        imseed,
+        model_args["num_ims"],
     )
 
     # In a for loop iterate through them to compute distances out of them.
-    for cov_filename in tqdm.tqdm(covs_filename_list, desc="Noise Levels - Dists", position=1):
+    for cov_filename in tqdm.tqdm(
+        covs_filename_list, desc="Noise Levels - Dists", position=1
+    ):
         print(f"Computations for the cov file {cov_filename} has started.")
         bc.measure_dist_parallel(
             covs_dir=os.path.join(
@@ -354,28 +429,35 @@ def main(model_args):
 
     # try to get these keys from the configuration dict.
     # If not specified in config file, they will be True by default and computed.
+    ims_seed = None
     get_covs = model_args.get("get_covs", True)
     norm_covs = model_args.get("norm_covs", True)
     comp_dists = model_args.get("comp_dists", True)
 
     if get_covs == True:
 
-        ims = load_ims(model_args["model_weights_name"], model_args["num_ims"])
+        ims, ims_seed = load_ims(model_args)
 
         models_list = load_models(model_args)
 
         # directly saves the computed covs, so it doesn't return anything.
-        get_covs_from_models(models_list, ims, model_args)
+        get_covs_from_models(models_list, ims, ims_seed, model_args)
 
     if norm_covs == True:
 
         # directly saves the normalized covs, so it doesn't return anything.
-        normalize_covs(model_args)
+        if ims_seed == None:
+            ims_seed = model_args["ims_seed"]
+
+        normalize_covs(model_args, ims_seed)
 
     if comp_dists == True:
 
         # directly saves the dists, so it doesn't return anything.
-        compute_dists(model_args)
+        if ims_seed == None:
+            ims_seed = model_args["ims_seed"]
+
+        compute_dists(model_args, ims_seed)
 
 
 if __name__ == "__main__":
