@@ -31,7 +31,7 @@ def _wasserstein_numpy(sigma1, sigma2, mu1=None, mu2=None):
     tr_term = sigma1 + sigma2 - 2 * (sig1_sig2_sqrt)
     d_sq = means_term + np.trace(tr_term)
 
-    d_sq = prevent_negative_square(d_sq, "Wasserstein")
+    d_sq = check_small_negative(d_sq)
 
     return d_sq**0.5
 
@@ -59,7 +59,7 @@ def _wasserstein_torch(sigma1, sigma2, mu1=None, mu2=None):
     tr_term = sigma1 + sigma2 - 2 * (sig1_sig2_sqrt)
     d_sq = means_term + torch.trace(tr_term)
 
-    d_sq = prevent_negative_square(d_sq, "Wasserstein")
+    d_sq = check_small_negative(d_sq)
 
     return d_sq**0.5
 
@@ -70,7 +70,7 @@ def _hellinger_numpy(sigma1, sigma2, mu1=None, mu2=None):
 
     d_sq = 2 * (1 - np.exp(-d_B))
 
-    d_sq = prevent_negative_square(d_sq, "Hellinger")
+    d_sq = check_small_negative(d_sq)
 
     return d_sq**0.5
 
@@ -81,7 +81,7 @@ def _hellinger_torch(sigma1, sigma2, mu1=None, mu2=None):
 
     d_sq = 2 * (1 - torch.exp(-d_B))
 
-    d_sq = prevent_negative_square(d_sq, "Hellinger")
+    d_sq = check_small_negative(d_sq)
 
     return d_sq**0.5
 
@@ -98,7 +98,7 @@ def _mahalanobis_numpy(
             delta_mu,
             np.matmul((np.linalg.inv(np.divide(sigma1 + sigma2, 2))), delta_mu),
         )
-        d_sq = prevent_negative_square(d_sq, "Mahalanobis")
+        d_sq = check_small_negative(d_sq)
         d = d_sq**0.5
 
     return d
@@ -118,7 +118,7 @@ def _mahalanobis_torch(
                 (torch.linalg.inv(torch.divide(sigma1 + sigma2, 2))), delta_mu
             ),
         )
-        d_sq = prevent_negative_square(d_sq, "Mahalanobis")
+        d_sq = check_small_negative(d_sq)
         d = d_sq**0.5
 
     return d
@@ -673,7 +673,7 @@ def select_measure(cov_mtx, meas_name, module=None):
             else:
                 measure = functools.partial(_jsd_torch, gen=gen_torch_cpu)
 
-        elif meas_name == "kl div" or meas_name == "kl divergence":
+        elif meas_name == "kldiv" or meas_name == "kldivergence":
             measure = _KL_div_torch
 
         elif meas_name == "bhattacharyya":
@@ -694,33 +694,9 @@ def select_measure(cov_mtx, meas_name, module=None):
     return measure
 
 
-def prevent_negative_square(d_sq, dist_name):
-    """
-    Prevent negative squared distances due to numerical precision errors.
-
-    This function handles small negative values that may arise from floating-point
-    arithmetic when computing distances. Values very close to zero (within -1e-7)
-    are set to 0 without warning, while more significantly negative values are
-    flagged with a warning as they indicate a problem with the distance calculation.
-
-    Parameters
-    ----------
-    d_sq : float
-        The squared distance value that may be negative due to numerical errors.
-    dist_name : str
-        The name of the distance metric, used for warning messages.
-
-    Returns
-    -------
-    d_sq : float
-        The corrected squared distance value, with negative values set to 0.
-    """
+def check_small_negative(d_sq):
 
     if d_sq < 0 and d_sq > -1e-7:
-        d_sq = 0
-
-    elif d_sq < -1e-7:
-        warnings.warn(f"{dist_name} distance cannot be negative. Value is: {d_sq}")
         d_sq = 0
 
     return d_sq
