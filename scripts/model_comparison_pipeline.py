@@ -141,7 +141,8 @@ def get_normed_cov_files(covs_dir, cov_filename, imseed, N):
 
 
 def get_seed_from_filename(filename):
-    pattern = re.compile(r"seed_(\d+)_N_\d+\.txt$")
+
+    pattern = re.compile(r"image_filenames_seed_(\d+)_N_\d+\.txt$")
     m = pattern.match(filename)
     if m:
         seed = int(m.group(1))
@@ -188,19 +189,16 @@ def load_ims(model_args):
     N = model_args["num_ims"]
 
     if ims_filename_file == None:
-        print("Ims filename is empty")
 
         seed = model_args.get(
             "ims_seed", np.random.SeedSequence().generate_state(1, dtype=np.uint32)[0]
         )
 
-        print(f"Created seed is {seed}")
+        print(f"Seed for the images is {seed}")
 
         rng = np.random.default_rng(seed)
 
         all_file_names = os.listdir(im_folder + "/mscoco/")
-
-        print(f"Length of all files is {len(all_file_names)}")
 
         selected_files = rng.choice(all_file_names, size=N, replace=False)
 
@@ -208,7 +206,7 @@ def load_ims(model_args):
 
     else:
 
-        with open(ims_filename_file) as f:
+        with open(os.path.join(im_folder, "im_filename_files", ims_filename_file)) as f:
             selected_files = [line.strip() for line in f]
 
         seed = get_seed_from_filename(ims_filename_file)
@@ -362,9 +360,7 @@ def normalize_covs(model_args, im_seed):
         model_args["noise_bs"], desc="Noise_Levels - Normalize Covs", position=1
     ):
 
-        normed_cov_full_filename = (
-            cov_full_filename + "_bval_" + str(noise_b[0]) + ".npy"
-        )
+        normed_cov_full_filename = cov_full_filename + "_bval_" + str(noise_b) + ".npy"
 
         file_path = os.path.join(
             DIRS["result_path"],
@@ -373,13 +369,11 @@ def normalize_covs(model_args, im_seed):
             normed_cov_full_filename,
         )
 
-        print(f"Normalized covariance filename is {file_path}")
-
         if Path(file_path).exists():
             print(f"File at {file_path} already exists.")
 
         else:
-            b = 1 / noise_b[0]
+            b = 1 / noise_b
             noise_level = model_args["num_ims"] * b / (1 + (model_args["num_ims"] * b))
 
             print(
