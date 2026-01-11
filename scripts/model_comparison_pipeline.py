@@ -106,7 +106,7 @@ def get_model_weights(model_weights_name):
     return weights
 
 
-def get_normed_cov_files(covs_dir, cov_filename, imseed, N):
+def get_normed_cov_files(covs_dir, cov_filename, imseed, N, bvals):
     """
     Gets the list of filenames of normalized covariance files. Those are the
     ones which has "bval" in their filenames.
@@ -122,20 +122,21 @@ def get_normed_cov_files(covs_dir, cov_filename, imseed, N):
 
     dir_path = Path(covs_dir)
 
-    # covs_<something>_imseed_<number>_N_<number>_bval_<number>.npy
-    pattern = re.compile(rf"^{cov_filename}_imseed_{imseed}_N_{N}_bval_\d+\.npy$")
-
     normed_cov_filenames = []
 
-    for file in dir_path.iterdir():
+    for bval in bvals:
+        # covs_<something>_imseed_<number>_N_<number>_bval_<number>.npy
+        pattern = re.compile(rf"^{cov_filename}_imseed_{imseed}_N_{N}_bval_{bval}.npy$")
 
-        if not file.is_file():
-            continue
+        for file in dir_path.iterdir():
 
-        match = pattern.match(file.name)
+            if not file.is_file():
+                continue
 
-        if match:
-            normed_cov_filenames.append(file.name)
+            match = pattern.match(file.name)
+
+            if match:
+                normed_cov_filenames.append(file.name)
 
     return normed_cov_filenames
 
@@ -401,6 +402,7 @@ def compute_dists(model_args, imseed):
         model_args["covs_filename"],
         imseed,
         model_args["num_ims"],
+        model_args["noise_bs"],
     )
 
     # In a for loop iterate through them to compute distances out of them.
