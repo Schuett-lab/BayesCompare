@@ -378,7 +378,7 @@ def _tvd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
 ## Divergences
 
 
-def _KL_div_numpy(sigma1, sigma2, mu1=None, mu2=None):
+def _KL_div_numpy_nonsymm(sigma1, sigma2, mu1=None, mu2=None):
 
     # Handling of mean term feels a bit sloppy. Can be improved in the future
     if mu1 is None:
@@ -406,7 +406,15 @@ def _KL_div_numpy(sigma1, sigma2, mu1=None, mu2=None):
     return d
 
 
-def _KL_div_torch(sigma1, sigma2, mu1=None, mu2=None):
+def _KL_div_numpy(sigma1, sigma2, mu1=None, mu2=None):
+
+    kl1 = _KL_div_numpy_nonsymm(sigma1, sigma2, mu1=None, mu2=None)
+    kl2 = _KL_div_numpy_nonsymm(sigma2, sigma1, mu1=None, mu2=None)
+
+    return (kl1 + kl2) / 2
+
+
+def _KL_div_torch_nonsymm(sigma1, sigma2, mu1=None, mu2=None):
 
     # Handling of mean term feels a bit sloppy. Can be improved in the future
     if mu1 is None:
@@ -432,6 +440,14 @@ def _KL_div_torch(sigma1, sigma2, mu1=None, mu2=None):
     d = (1 / 2) * (mean_term + tr_term - log_term - sigma1.shape[0])
 
     return d
+
+
+def _KL_div_torch(sigma1, sigma2, mu1=None, mu2=None):
+
+    kl1 = _KL_div_torch_nonsymm(sigma1, sigma2, mu1=None, mu2=None)
+    kl2 = _KL_div_torch_nonsymm(sigma2, sigma1, mu1=None, mu2=None)
+
+    return (kl1 + kl2) / 2
 
 
 def _bhattacharyya_numpy(sigma1, sigma2, mu1=None, mu2=None):
