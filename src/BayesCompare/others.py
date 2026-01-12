@@ -184,10 +184,6 @@ def comp_other_metrics(
         noise_var = dim * b / (1 + (dim * b))
 
     idx = np.random.randint(len(covs))
-    normalized = check_cov_normalized(covs[idx])
-
-    if not normalized:
-        covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
 
     # is it okay to check the symmetry of only one randomly chosen matrix or should I check all matrices in covs?
     symmetric = check_cov_symmetry(covs[idx])
