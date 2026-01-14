@@ -5,7 +5,7 @@ import tqdm
 import re
 import torch
 import functools
-import warnings
+from scipy.linalg import cho_factor, cho_solve
 from typing import Sequence, Union, Optional
 from .cov_utils import (
     check_cov_normalized,
@@ -378,76 +378,55 @@ def _tvd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
 ## Divergences
 
 
-def _KL_div_numpy_nonsymm(sigma1, sigma2, mu1=None, mu2=None):
+def _KL_div_numpy(sigma1, sigma2, mu1=0, mu2=0):
 
-    # Handling of mean term feels a bit sloppy. Can be improved in the future
-    if mu1 is None:
-        mu1 = np.zeros(sigma1.shape[0])
+    c2, lower2 = cho_factor(sigma2)
+    c1, lower1 = cho_factor(sigma1)
 
-    if mu2 is None:
-        mu2 = np.zeros(sigma2.shape[0])
+    tr_21 = np.trace(cho_solve((c2, lower2), sigma1))
+    tr_12 = np.trace(cho_solve((c1, lower1), sigma2))
 
-    delta_mu = np.subtract(mu2, mu1)
+    if mu1 == 0 and mu2 == 0:
 
-    inv_s2 = np.linalg.inv(sigma2)
-
-    if (delta_mu < 1e-15).all():  # only this condition is tested
         mean_term = 0
 
-    else:  # this condition was not tested
-        mean_term = np.transpose(delta_mu) @ inv_s2 @ delta_mu
+    else:
 
-    tr_term = np.trace(inv_s2 @ sigma1)
+        delta_mu = np.subtract(mu1, mu2)
+        mean_term = np.inner(
+            delta_mu,
+            np.matmul(np.linalg.inv(sigma1) + np.linalg.inv(sigma2), delta_mu),
+        )
+        mean_term = 0.25 * mean_term
 
-    log_term = np.linalg.slogdet(sigma1)[1] - np.linalg.slogdet(sigma2)[1]
-
-    d = (1 / 2) * (mean_term + tr_term - log_term - sigma1.shape[0])
-
-    return d
-
-
-def _KL_div_numpy(sigma1, sigma2, mu1=None, mu2=None):
-
-    kl1 = _KL_div_numpy_nonsymm(sigma1, sigma2, mu1=None, mu2=None)
-    kl2 = _KL_div_numpy_nonsymm(sigma2, sigma1, mu1=None, mu2=None)
-
-    return (kl1 + kl2) / 2
+    return 0.25 * (tr_21 + tr_12) - 0.5 * sigma1.shape[0] + mean_term
 
 
-def _KL_div_torch_nonsymm(sigma1, sigma2, mu1=None, mu2=None):
+def _KL_div_torch(sigma1, sigma2, mu1=0, mu2=0):
 
-    # Handling of mean term feels a bit sloppy. Can be improved in the future
-    if mu1 is None:
-        mu1 = torch.zeros(sigma1.shape[0])
+    c2 = torch.linalg.cholesky(sigma2)
+    c1 = torch.linalg.cholesky(sigma1)
 
-    if mu2 is None:
-        mu2 = torch.zeros(sigma2.shape[0])
+    tr_21 = torch.trace(torch.cholesky_solve(sigma1, c2))
+    tr_12 = torch.trace(torch.cholesky_solve(sigma2, c1))
 
-    delta_mu = torch.subtract(mu2, mu1)
+    if mu1 == 0 and mu2 == 0:
 
-    inv_s2 = torch.linalg.inv(sigma2)
-
-    if (delta_mu < 1e-15).all():  # only this condition is tested
         mean_term = 0
 
-    else:  # this condition was not tested
-        mean_term = torch.transpose(delta_mu) @ inv_s2 @ delta_mu
+    else:
 
-    tr_term = torch.trace(inv_s2 @ sigma1)
+        delta_mu = torch.subtract(mu1, mu2)
+        mean_term = torch.inner(
+            delta_mu,
+            torch.matmul(
+                (torch.linalg.inv(sigma1) + torch.linalg.inv(sigma2), delta_mu)
+            ),
+        )
 
-    log_term = torch.linalg.slogdet(sigma1)[1] - torch.linalg.slogdet(sigma2)[1]
+        mean_term = 0.25 * mean_term
 
-    d = (1 / 2) * (mean_term + tr_term - log_term - sigma1.shape[0])
-
-    return d
-
-
-def _KL_div_torch(sigma1, sigma2, mu1=None, mu2=None):
-
-    kl1 = _KL_div_torch_nonsymm(sigma1, sigma2, mu1=None, mu2=None)
-    kl2 = _KL_div_torch_nonsymm(sigma2, sigma1, mu1=None, mu2=None)
-
-    return (kl1 + kl2) / 2
+    return 0.25 * (tr_21 + tr_12) - 0.5 * sigma1.shape[0] + mean_term
 
 
 def _bhattacharyya_numpy(sigma1, sigma2, mu1=None, mu2=None):
