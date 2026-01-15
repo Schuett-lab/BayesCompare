@@ -16,6 +16,11 @@ ALL_MEASURES = [
     "mahalanobis",
 ]
 
+# number of samples for computing jsd and tvd distances.
+# can also be set separate for each test or globally from here
+# highly affects how long the tests take
+NUM_SAMPLES = 100000
+
 
 class TestDists(unittest.TestCase):
 
@@ -100,7 +105,7 @@ class TestDists(unittest.TestCase):
         output_np = []
         output_th = []
 
-        num_samples = 1000000
+        num_samples = NUM_SAMPLES
 
         output_np.append(
             distances.measure_dist(
@@ -139,7 +144,7 @@ class TestDists(unittest.TestCase):
         output_np = []
         output_th = []
 
-        num_samples = 1000000
+        num_samples = NUM_SAMPLES
 
         for pair in self.test_close_input_data:
             output_np.append(
@@ -182,7 +187,7 @@ class TestDists(unittest.TestCase):
         output_np = []
         output_th = []
 
-        num_samples = 1000000
+        num_samples = NUM_SAMPLES
 
         for pair in self.test_symmetric_inputs_data:
 
@@ -228,7 +233,7 @@ class TestDists(unittest.TestCase):
         output_np = []
         output_th = []
 
-        num_samples = 1000000
+        num_samples = NUM_SAMPLES
 
         output_np.append(
             distances.measure_dist(
@@ -266,7 +271,7 @@ class TestDists(unittest.TestCase):
         output_np = []
         output_th = []
 
-        num_samples = 1000000
+        num_samples = NUM_SAMPLES
 
         output_np.append(
             distances.measure_dist(
@@ -304,7 +309,7 @@ class TestDists(unittest.TestCase):
         output_np = []
         output_th = []
 
-        num_samples = 1000000
+        num_samples = NUM_SAMPLES
 
         output_np.append(
             distances.measure_dist(
@@ -341,7 +346,7 @@ class TestDists(unittest.TestCase):
         output_np = []
         output_th = []
 
-        num_samples = 1000000
+        num_samples = NUM_SAMPLES
 
         output_np.append(
             distances.measure_dist(
@@ -378,7 +383,7 @@ class TestDists(unittest.TestCase):
         output_np = []
         output_th = []
 
-        num_samples = 1000000
+        num_samples = NUM_SAMPLES
 
         for pair in self.test_large_and_small_input:
 
