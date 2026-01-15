@@ -7,6 +7,19 @@ import torch
 import functools
 from scipy.linalg import cho_factor, cho_solve
 from typing import Sequence, Union, Optional
+
+from .others import (
+    _cka_np,
+    _cka_torch,
+    _rsa_corr_np,
+    _rsa_corr_torch,
+    _rsa_rank_spearman_np,
+    _rsa_rank_spearman_torch,
+    _rsa_cos_np,
+    _rsa_cos_torch,
+    _rsa_acos_np,
+    _rsa_acos_torch,
+)
 from .cov_utils import (
     check_cov_normalized,
     cov_trace_norm_sigma_N,
@@ -15,7 +28,8 @@ from .cov_utils import (
     check_input_format,
 )
 
-## Metrics
+
+### Metrics
 
 
 def _wasserstein_numpy(sigma1, sigma2, mu1=None, mu2=None):
@@ -510,19 +524,19 @@ def measure_dist(
     >>> # Given a list of covariance matrices `cov_list`
     >>> dist_matrix = measure_dist(cov_list, meas_name="TVD")
     """
-    # I am turning covs into a list of matrices rather than using it as torch/numpy array. I don't know if it is a good thing to do.
-    # I am doing it inside `check_and_change_input_format` as the whole `measure_dist` function is written to work with list of matrices.
-    # But normally functions such as `cov_trace_norm_sigma_N` accept 3D torch/np arrays and work more efficiently that way.
+
     covs, N, module = check_and_change_input_format(covs)
 
     if noise_var == None:
         dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
         noise_var = dim * b / (1 + (dim * b))
 
+    meas_name = simplify_string(meas_name)
+
     idx = np.random.randint(len(covs))
     normalized = check_cov_normalized(covs[idx])
 
-    if not normalized:
+    if not normalized and meas_name in DISTANCES["ours"]:
         covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
 
     # is it okay to check the symmetry of only one randomly chosen matrix or should I check all matrices in covs?
@@ -545,12 +559,7 @@ def measure_dist(
 
             if j > i:
 
-                if (
-                    measure == _jsd_numpy
-                    or measure == _tvd_numpy
-                    or measure == _jsd_torch
-                    or measure == _tvd_torch
-                ):
+                if "tvd" in meas_name or "jsd" in meas_name:
                     dist[i, j] = measure(
                         ci, cj, num_samples=samples_jsd_tvd
                     )  # not using mean, for a generalized code mean should be provided
@@ -620,64 +629,29 @@ def select_measure(cov_mtx, meas_name, module=None):
 
     if module == np:
 
-        if meas_name == "wasserstein":
-            measure = _wasserstein_numpy
+        try:
+            measure = REGISTRY["numpy"][meas_name]
 
-        elif meas_name == "hellinger":
-            measure = _hellinger_numpy
-
-        elif meas_name == "tvd":
-            measure = functools.partial(_tvd_numpy, gen=gen)
-
-        elif meas_name == "jsd":
-            measure = functools.partial(_jsd_numpy, gen=gen)
-
-        elif meas_name == "kldiv" or meas_name == "kldivergence":
-            measure = _KL_div_numpy
-
-        elif meas_name == "bhattacharyya":
-            measure = _bhattacharyya_numpy
-
-        elif meas_name == "mahalanobis":
-            measure = _mahalanobis_numpy
-
-        else:
+        except KeyError:
             raise NotImplementedError(
                 "Given metric name is not valid for Numpy array covariances."
             )
 
     elif module == torch:
 
-        if meas_name == "wasserstein":
-            measure = _wasserstein_torch
+        try:
+            if cov_mtx.is_cuda and ("tvd" in meas_name or "jsd" in meas_name):
 
-        elif meas_name == "hellinger":
-            measure = _hellinger_torch
+                measure = REGISTRY["torch"][meas_name + "cuda"]
 
-        elif meas_name == "tvd":
-            # if cov mtx is on GPU, provide the TVD with the CUDA seeded generator, or else with the CPU seeded generator
-            if cov_mtx.is_cuda:
-                measure = functools.partial(_tvd_torch, gen=gen_torch_cuda)
+            elif not (cov_mtx.is_cuda) and ("tvd" in meas_name or "jsd" in meas_name):
+
+                measure = REGISTRY["torch"][meas_name + "cpu"]
+
             else:
-                measure = functools.partial(_tvd_torch, gen=gen_torch_cpu)
+                measure = REGISTRY["torch"][meas_name]
 
-        elif meas_name == "jsd":
-            # if cov mtx is on GPU, provide the JSD with the CUDA seeded generator, or else with the CPU seeded generator
-            if cov_mtx.is_cuda:
-                measure = functools.partial(_jsd_torch, gen=gen_torch_cuda)
-            else:
-                measure = functools.partial(_jsd_torch, gen=gen_torch_cpu)
-
-        elif meas_name == "kldiv" or meas_name == "kldivergence":
-            measure = _KL_div_torch
-
-        elif meas_name == "bhattacharyya":
-            measure = _bhattacharyya_torch
-
-        elif meas_name == "mahalanobis":
-            measure = _mahalanobis_torch
-
-        else:
+        except KeyError:
             raise NotImplementedError(
                 "Given metric name is not valid for Tensor tensor covariances."
             )
@@ -686,6 +660,7 @@ def select_measure(cov_mtx, meas_name, module=None):
         raise NotImplementedError(
             "Covariance matrices must be either a torch tensor or a numpy array."
         )
+
     return measure
 
 
@@ -695,3 +670,71 @@ def check_small_negative(d_sq):
         d_sq = 0
 
     return d_sq
+
+
+DISTANCES = {
+    "ours": [
+        "wasserstein",
+        "hellinger",
+        "tvd",
+        "totalvariation",
+        "totalvariationdistance",
+        "jsd",
+        "jensenshannon",
+        "jensenshannondivergence",
+        "kldiv",
+        "kldivergence",
+        "bhattacharyya",
+        "mahalanobis",
+    ],
+    "others": ["cka", "rsa_arccos", "rsa_cos", "rsa_corr", "rsa_rank"],
+}
+
+REGISTRY = {
+    "numpy": {
+        "wasserstein": _wasserstein_numpy,
+        "hellinger": _hellinger_numpy,
+        "tvd": functools.partial(_tvd_numpy, gen=gen),
+        "totalvariation": functools.partial(_tvd_numpy, gen=gen),
+        "totalvariationdistance": functools.partial(_tvd_numpy, gen=gen),
+        "jsd": functools.partial(_jsd_numpy, gen=gen),
+        "jensenshannon": functools.partial(_jsd_numpy, gen=gen),
+        "jensenshannondivergence": functools.partial(_jsd_numpy, gen=gen),
+        "kldiv": _KL_div_numpy,
+        "kldivergence": _KL_div_numpy,
+        "bhattacharyya": _bhattacharyya_numpy,
+        "mahalanobis": _mahalanobis_numpy,
+        "cka": _cka_np,
+        "rsaarccos": _rsa_acos_np,
+        "rsacos": _rsa_cos_np,
+        "rsacorr": _rsa_corr_np,
+        "rsarank": _rsa_rank_spearman_np,
+    },
+    "torch": {
+        "wasserstein": _wasserstein_torch,
+        "hellinger": _hellinger_torch,
+        "tvdcuda": functools.partial(_tvd_torch, gen=gen_torch_cuda),
+        "totalvariationcuda": functools.partial(_tvd_torch, gen=gen_torch_cuda),
+        "totalvariationdistancecuda": functools.partial(_tvd_torch, gen=gen_torch_cuda),
+        "tvdcpu": functools.partial(_tvd_torch, gen=gen_torch_cpu),
+        "totalvariationcpu": functools.partial(_tvd_torch, gen=gen_torch_cpu),
+        "totalvariationdistancecpu": functools.partial(_tvd_torch, gen=gen_torch_cpu),
+        "jsdcuda": functools.partial(_jsd_torch, gen=gen_torch_cuda),
+        "jensenshannoncuda": functools.partial(_jsd_torch, gen=gen_torch_cuda),
+        "jensenshannondivergencecuda": functools.partial(
+            _jsd_torch, gen=gen_torch_cuda
+        ),
+        "jsdcpu": functools.partial(_jsd_torch, gen=gen_torch_cpu),
+        "jensenshannoncpu": functools.partial(_jsd_torch, gen=gen_torch_cpu),
+        "jensenshannondivergencecpu": functools.partial(_jsd_torch, gen=gen_torch_cpu),
+        "kldiv": _KL_div_torch,
+        "kldivergence": _KL_div_torch,
+        "bhattacharyya": _bhattacharyya_torch,
+        "mahalanobis": _mahalanobis_torch,
+        "cka": _cka_torch,
+        "rsaarccos": _rsa_acos_torch,
+        "rsacos": _rsa_cos_torch,
+        "rsacorr": _rsa_corr_torch,
+        "rsarank": _rsa_rank_spearman_torch,
+    },
+}
