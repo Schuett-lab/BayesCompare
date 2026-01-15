@@ -128,6 +128,10 @@ class TestDists(unittest.TestCase):
         assert_allclose(output_np, np.zeros_like(output_np), rtol=1e-10, atol=1e-10)
         assert_allclose(output_th, torch.zeros_like(output_th), rtol=1e-6, atol=1e-6)
 
+        if "jsd" in meas_name or "tvd" in meas_name or "hellinger" in meas_name:
+            assert np.all(output_np <= 1)
+            assert torch.all(output_th <= 1)
+
     # Very close covariance matrices given as input: d(A, A + ε)
     @parameterized.expand(ALL_MEASURES)
     def test_similar_input(self, meas_name):
@@ -167,12 +171,13 @@ class TestDists(unittest.TestCase):
             assert_close(output_th, torch.zeros_like(output_th), rtol=0.05, atol=0.05)
             assert_allclose(output_np, output_th.numpy(), rtol=1e-3, atol=1e-3)
 
+        if "jsd" in meas_name or "tvd" in meas_name or "hellinger" in meas_name:
+            assert np.all(output_np <= 1)
+            assert torch.all(output_th <= 1)
+
     # Symmetry of distance measure check: d(A, B) vs d(B, A)
     @parameterized.expand(ALL_MEASURES)
     def test_symmetric_inputs(self, meas_name):
-
-        if "kl" in meas_name:
-            self.skipTest("KL divergence is not symmetric.")
 
         output_np = []
         output_th = []
@@ -212,6 +217,10 @@ class TestDists(unittest.TestCase):
             assert_close(output_th[0:3], output_th[3:6], rtol=1e-8, atol=1e-10)
             assert_allclose(output_np, output_th.numpy(), rtol=1e-3, atol=1e-3)
 
+        if "jsd" in meas_name or "tvd" in meas_name or "hellinger" in meas_name:
+            assert np.all(output_np <= 1)
+            assert torch.all(output_th <= 1)
+
     # PSD inputs (one eigenval = 0)
     @parameterized.expand(ALL_MEASURES)
     def test_psd_input(self, meas_name):
@@ -245,6 +254,10 @@ class TestDists(unittest.TestCase):
         assert_allclose(output_np, output_th.numpy(), rtol=0.05, atol=0.05)
         assert np.all(output_np >= 0), "NPArray contains negative values"
         assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
+
+        if "jsd" in meas_name or "tvd" in meas_name or "hellinger" in meas_name:
+            assert np.all(output_np <= 1)
+            assert torch.all(output_th <= 1)
 
     # Almost PSD inputs (one eigenval ~ 0)
     @parameterized.expand(ALL_MEASURES)
@@ -281,6 +294,10 @@ class TestDists(unittest.TestCase):
         assert np.all(output_np >= 0), "NPArray contains negative values"
         assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
 
+        if "jsd" in meas_name or "tvd" in meas_name or "hellinger" in meas_name:
+            assert np.all(output_np <= 1)
+            assert torch.all(output_th <= 1)
+
     # Large scale input
     @parameterized.expand(ALL_MEASURES)
     def test_large_scale_inputs(self, meas_name):
@@ -314,6 +331,10 @@ class TestDists(unittest.TestCase):
         assert np.all(output_np >= 0), "NPArray contains negative values"
         assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
 
+        if "jsd" in meas_name or "tvd" in meas_name or "hellinger" in meas_name:
+            assert np.all(output_np <= 1)
+            assert torch.all(output_th <= 1)
+
     # Small scale input
     @parameterized.expand(ALL_MEASURES)
     def test_large_scale_inputs(self, meas_name):
@@ -346,6 +367,10 @@ class TestDists(unittest.TestCase):
         assert_allclose(output_np, output_th.numpy(), rtol=1e-3, atol=1e-3)
         assert np.all(output_np >= 0), "NPArray contains negative values"
         assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
+
+        if "jsd" in meas_name or "tvd" in meas_name or "hellinger" in meas_name:
+            assert np.all(output_np <= 1)
+            assert torch.all(output_th <= 1)
 
     # One large and one small scale input
     @parameterized.expand(ALL_MEASURES)
@@ -381,3 +406,7 @@ class TestDists(unittest.TestCase):
         assert_allclose(output_np, output_th.numpy(), rtol=1e-2, atol=1e-2)
         assert np.all(output_np >= 0), "NPArray contains negative values"
         assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
+
+        if "jsd" in meas_name or "tvd" in meas_name or "hellinger" in meas_name:
+            assert np.all(output_np <= 1)
+            assert torch.all(output_th <= 1)
