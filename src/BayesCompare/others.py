@@ -3,16 +3,6 @@
 import numpy as np
 import torch
 import scipy.stats as stats
-from typing import Sequence, Union, Optional
-from .distances import simplify_string
-from .cov_utils import (
-    check_cov_normalized,
-    cov_trace_norm_sigma_N,
-    check_cov_symmetry,
-    check_and_change_input_format,
-    check_input_format,
-)
-import tqdm
 
 
 def _cka_np(K1, K2):
@@ -73,14 +63,15 @@ def _rsa_corr_torch(K1, K2):
     d2[idx] -= torch.mean(d2[idx])
     return (
         torch.sum(d1[idx] * d2[idx])
-        / torch.sqrt(np.sum(d1[idx] * d1[idx]))
-        / torch.sqrt(np.sum(d2[idx] * d2[idx]))
+        / torch.sqrt(torch.sum(d1[idx] * d1[idx]))
+        / torch.sqrt(torch.sum(d2[idx] * d2[idx]))
     )
 
 
 def _rsa_rank_spearman_np(K1, K2):
     """euclidean distances, Spearman's rank correlation similarity"""
-    d1, d2 = _rsa_euclidean_dist_np(K1, K2)
+    d1 = _rsa_euclidean_dist_np(K1)
+    d2 = _rsa_euclidean_dist_np(K2)
     idx = np.triu_indices(d1.shape[0], 1)
     ranked_d1 = stats.rankdata(d1[idx], "average")
     ranked_d2 = stats.rankdata(d2[idx], "average")
@@ -93,10 +84,11 @@ def _rsa_rank_spearman_np(K1, K2):
 
 def _rsa_rank_spearman_torch(K1, K2):
     """euclidean distances, Spearman's rank correlation similarity"""
-    d1, d2 = _rsa_euclidean_dist_torch(K1, K2)
+    d1 = _rsa_euclidean_dist_torch(K1)
+    d2 = _rsa_euclidean_dist_torch(K2)
     idx = torch.triu_indices(d1.shape[0], 1)
-    ranked_d1 = stats.rankdata(d1[idx], "average")
-    ranked_d2 = stats.rankdata(d2[idx], "average")
+    ranked_d1 = torch.Tensor(stats.rankdata(d1[idx], "average"))
+    ranked_d2 = torch.Tensor(stats.rankdata(d2[idx], "average"))
     ranked_d1 = ranked_d1 - torch.mean(ranked_d1)
     ranked_d2 = ranked_d2 - torch.mean(ranked_d2)
     n = ranked_d1.shape[0]
@@ -165,105 +157,6 @@ def _rsa_euclidean_dist_np(M):
 
 def _rsa_euclidean_dist_torch(M):
     diag = torch.diag(M)
-    d = torch.Tensor.expand(diag, 0) + torch.Tensor.expand(diag, 1) - 2 * M
+    d = diag.unsqueeze(0) + diag.unsqueeze(1) - 2 * M
 
     return d
-
-
-def comp_other_metrics(
-    covs: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
-    meas_name: str = "RSA",
-    noise_var: Optional[float] = None,
-    b: float = 1 / 100,
-):
-
-    covs, N, module = check_and_change_input_format(covs)
-
-    if noise_var == None:
-        dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
-        noise_var = dim * b / (1 + (dim * b))
-
-    idx = np.random.randint(len(covs))
-
-    # is it okay to check the symmetry of only one randomly chosen matrix or should I check all matrices in covs?
-    symmetric = check_cov_symmetry(covs[idx])
-
-    if not symmetric:
-        raise ValueError(
-            f"Covariance matrices should be symmetric! The covariance matrix at index {idx} violates this condition."
-        )
-
-    measure = select_other_metric(covs[0], meas_name, module=module)
-
-    dist = module.zeros((N, N))
-
-    progress_bar = tqdm.tqdm(total=int((N * (N - 1)) / 2))
-
-    for i, ci in enumerate(covs):
-
-        for j, cj in enumerate(covs):
-
-            if j > i:
-
-                dist[i, j] = measure(ci, cj)
-
-                dist[j, i] = dist[i, j]
-
-                progress_bar.update(1)
-
-    return dist
-
-
-def select_other_metric(cov_mtx, meas_name: str = "RSA", module=None):
-
-    if module == None:
-        module = check_input_format(cov_mtx)
-
-    meas_name = simplify_string(meas_name)
-
-    if module == np:
-
-        if "rsa" in meas_name:
-            if "arccos" in meas_name:
-                measure = _rsa_acos_np
-            elif "cos" in meas_name:
-                measure = _rsa_cos_np
-            elif "corr" in meas_name:
-                measure = _rsa_corr_np
-            elif "rank" in meas_name:
-                measure = _rsa_rank_spearman_np
-
-        elif "cka" in meas_name:
-            measure = _cka_np
-
-        else:
-            raise NotImplementedError(
-                "Given metric name is not valid for Numpy array covariances."
-            )
-
-    elif module == torch:
-
-        if "rsa" in meas_name:
-            if "arccos" in meas_name:
-                measure = _rsa_acos_torch
-            elif "cos" in meas_name:
-                measure = _rsa_cos_torch
-            elif "corr" in meas_name:
-                measure = _rsa_corr_torch
-            elif "rank" in meas_name:
-                measure = _rsa_rank_spearman_torch
-
-        elif "cka" in meas_name:
-            measure = _cka_torch
-
-        else:
-            raise NotImplementedError(
-                "Given metric name is not valid for Tensor tensor covariances."
-            )
-
-    else:
-        raise NotImplementedError(
-            "Covariance matrices must be either a torch tensor or a numpy array."
-        )
-
-    return measure
