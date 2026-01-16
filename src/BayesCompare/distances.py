@@ -113,7 +113,7 @@ def _mahalanobis_numpy(
 ):  # not the true mahalanobis definition
 
     if mu1 is None and mu2 is None:
-        d = np.array([0.0])
+        d_sq = np.array([0.0])
     else:
         delta_mu = np.subtract(mu1, mu2)
         d_sq = np.inner(
@@ -121,9 +121,8 @@ def _mahalanobis_numpy(
             np.matmul((np.linalg.inv(np.divide(sigma1 + sigma2, 2))), delta_mu),
         )
         d_sq = check_small_negative(d_sq)
-        d = d_sq**0.5
 
-    return d
+    return d_sq**0.5
 
 
 def _mahalanobis_torch(
@@ -131,7 +130,7 @@ def _mahalanobis_torch(
 ):  # not the true mahalanobis definition
 
     if mu1 is None and mu2 is None:
-        d = torch.Tensor([0.0])
+        d_sq = torch.Tensor([0.0])
     else:
         delta_mu = torch.subtract(mu1, mu2)
         d_sq = torch.inner(
@@ -141,9 +140,8 @@ def _mahalanobis_torch(
             ),
         )
         d_sq = check_small_negative(d_sq)
-        d = d_sq**0.5
 
-    return d
+    return d_sq**0.5
 
 
 gen = np.random.Generator(np.random.SFC64(42))
