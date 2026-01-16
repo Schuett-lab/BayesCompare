@@ -145,11 +145,10 @@ def _mahalanobis_torch(
 
 
 gen = np.random.Generator(np.random.SFC64(42))
+gen_torch_cpu = torch.Generator(device="cpu").manual_seed(42)
 
 if torch.cuda.is_available():
     gen_torch_cuda = torch.Generator(device="cuda").manual_seed(42)
-    # else: # I am commenting this out as I think if cuda is available both seeds should be initiated. But I will think better on it.
-    gen_torch_cpu = torch.Generator(device="cpu").manual_seed(42)
 
 
 def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
