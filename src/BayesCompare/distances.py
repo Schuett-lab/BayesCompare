@@ -34,11 +34,15 @@ from .cov_utils import (
 
 def _wasserstein_numpy(sigma1, sigma2, mu1=None, mu2=None):
 
-    # these conditions do not check for one mean is non zero and other is zero !!!
-    if mu1 is not None and mu2 is not None:
-        means_term = np.linalg.norm(mu1 - mu2, 2) ** 2
+    if mu1 is None:
+        if mu2 is None:
+            means_term = 0
+        else:
+            np.sum(mu2**2)
+    elif mu2 is None:
+        means_term = np.sum(mu1**2)
     else:
-        means_term = 0
+        means_term = np.sum((mu1 - mu2) ** 2)
 
     sig1_sqrt = scipy.linalg.sqrtm(sigma1)
     sig1_sig2_sqrt = scipy.linalg.sqrtm(sig1_sqrt @ sigma2 @ sig1_sqrt)
@@ -52,11 +56,15 @@ def _wasserstein_numpy(sigma1, sigma2, mu1=None, mu2=None):
 
 def _wasserstein_torch(sigma1, sigma2, mu1=None, mu2=None):
 
-    # these conditions do not check for one mean is non zero and other is zero !!!
-    if mu1 is not None and mu2 is not None:
-        means_term = torch.linalg.norm(mu1 - mu2, 2) ** 2
+    if mu1 is None:
+        if mu2 is None:
+            means_term = 0
+        else:
+            torch.sum(mu2**2)
+    elif mu2 is None:
+        means_term = torch.sum(mu1**2)
     else:
-        means_term = 0
+        means_term = torch.sum((mu1 - mu2) ** 2)
 
     if type(sigma1) != torch.Tensor:
         sigma1 = torch.tensor(sigma1)
