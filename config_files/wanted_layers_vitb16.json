@@ -1,8 +1,0 @@
-[
-  "layernorm_2_12",
-  "linear_1_13",
-  "gelu_1_14",
-  "linear_2_16",
-  "add_2_11:2",
-  "layernorm_3_18"
-]
