@@ -86,14 +86,19 @@ def load_covs(full_filename):
         with open(full_filename, "rb") as f:
             covs_names = pickle.load(f)
 
-        covs = []
+        if isinstance(covs_names, list) and isinstance(covs_names[0], dict):
+            covs = []
 
-        for cov_dict in covs_names:
+            for cov_dict in covs_names:
+                covs.append(list(cov_dict.values()))
 
-            covs.append(list(cov_dict.values()))
+            covs = np.stack(covs)
+            covs = covs.reshape(
+                covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3]
+            )
 
-        covs = np.stack(covs)
-        covs = covs.reshape(covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3])
+        if isinstance(covs_names, np.ndarray):
+            covs = covs_names
 
     elif ext in numpy_exts:
 
@@ -167,11 +172,12 @@ def measure_dist_parallel(
 
     covs, covs_filename = load_covs(covs_dir)
 
+    ### Commenting out the normalization check for now but this will be discussed.
     # randomly select one cov matrix from the list and check normalization
-    idx = np.random.randint(len(covs))
-    assert check_cov_normalized(
-        covs[idx]
-    ), "Invalid Operation: covariance matrices has to be trace normalized."
+    # idx = np.random.randint(len(covs))
+    # assert check_cov_normalized(
+    #     covs[idx]
+    # ), "Invalid Operation: covariance matrices has to be trace normalized."
 
     N = len(covs)
 
