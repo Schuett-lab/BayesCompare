@@ -144,14 +144,10 @@ def _mahalanobis_torch(
     return d_sq**0.5
 
 
-gen = np.random.Generator(np.random.SFC64(42))
-gen_torch_cpu = torch.Generator(device="cpu").manual_seed(42)
-
-if torch.cuda.is_available():
-    gen_torch_cuda = torch.Generator(device="cuda").manual_seed(42)
-
-
 def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
+
+    if gen == None:
+        gen = np.random.Generator(np.random.SFC64())
 
     if mu1 is None and mu2 is None:
         k = sigma1.shape[0]
@@ -212,6 +208,9 @@ def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
 
 
 def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
+
+    if gen == None:
+        gen = torch.Generator(device=sigma1.device)
 
     if type(sigma1) != torch.Tensor:
         sigma1 = torch.tensor(sigma1)
@@ -283,6 +282,9 @@ def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
 
 def _tvd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
 
+    if gen == None:
+        gen = np.random.Generator(np.random.SFC64())
+
     if mu1 is not None and mu2 is not None:
         k = len(mu1)
         A1 = np.linalg.cholesky(sigma1)
@@ -334,6 +336,9 @@ def _tvd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
 
 
 def _tvd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
+
+    if gen == None:
+        gen = torch.Generator(device=sigma1.device)
 
     if type(sigma1) != torch.Tensor:
         sigma1 = torch.tensor(sigma1)
@@ -484,6 +489,7 @@ def measure_dist(
     b: float = 1 / 100,
     samples_jsd_tvd=10000,
     show_progress: Optional[bool] = True,
+    generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
 ):
     """
     Compute a symmetric pairwise distance matrix from the list of covariances.
@@ -515,6 +521,8 @@ def measure_dist(
         Number of samples used for computing JSD and TVD measures. Defaults to 10000.
     show_progress : bool, optional
         Boolean to turn the tqdm progress bars on (True) or off (False). Default is on (True).
+    generator: np.random.Generator or torch.Generator, optional
+        A Generator object for the randomization for generating samples for JSD and TVD computations. Default is None.
 
     Returns
     -------
@@ -566,7 +574,7 @@ def measure_dist(
 
                 if "tvd" in meas_name or "jsd" in meas_name:
                     dist[i, j] = measure(
-                        ci, cj, num_samples=samples_jsd_tvd
+                        ci, cj, num_samples=samples_jsd_tvd, gen=generator
                     )  # not using mean, for a generalized code mean should be provided
                 else:
                     dist[i, j] = measure(
@@ -645,16 +653,7 @@ def select_measure(cov_mtx, meas_name, module=None):
     elif module == torch:
 
         try:
-            if cov_mtx.is_cuda and ("tvd" in meas_name or "jsd" in meas_name):
-
-                measure = REGISTRY["torch"][meas_name + "cuda"]
-
-            elif not (cov_mtx.is_cuda) and ("tvd" in meas_name or "jsd" in meas_name):
-
-                measure = REGISTRY["torch"][meas_name + "cpu"]
-
-            else:
-                measure = REGISTRY["torch"][meas_name]
+            measure = REGISTRY["torch"][meas_name]
 
         except KeyError:
             raise NotImplementedError(
@@ -699,12 +698,12 @@ REGISTRY = {
     "numpy": {
         "wasserstein": _wasserstein_numpy,
         "hellinger": _hellinger_numpy,
-        "tvd": functools.partial(_tvd_numpy, gen=gen),
-        "totalvariation": functools.partial(_tvd_numpy, gen=gen),
-        "totalvariationdistance": functools.partial(_tvd_numpy, gen=gen),
-        "jsd": functools.partial(_jsd_numpy, gen=gen),
-        "jensenshannon": functools.partial(_jsd_numpy, gen=gen),
-        "jensenshannondivergence": functools.partial(_jsd_numpy, gen=gen),
+        "tvd": _tvd_numpy,
+        "totalvariation": _tvd_numpy,
+        "totalvariationdistance": _tvd_numpy,
+        "jsd": _jsd_numpy,
+        "jensenshannon": _jsd_numpy,
+        "jensenshannondivergence": _jsd_numpy,
         "kldiv": _KL_div_numpy,
         "kldivergence": _KL_div_numpy,
         "bhattacharyya": _bhattacharyya_numpy,
@@ -718,20 +717,12 @@ REGISTRY = {
     "torch": {
         "wasserstein": _wasserstein_torch,
         "hellinger": _hellinger_torch,
-        "tvdcuda": functools.partial(_tvd_torch, gen=gen_torch_cuda),
-        "totalvariationcuda": functools.partial(_tvd_torch, gen=gen_torch_cuda),
-        "totalvariationdistancecuda": functools.partial(_tvd_torch, gen=gen_torch_cuda),
-        "tvdcpu": functools.partial(_tvd_torch, gen=gen_torch_cpu),
-        "totalvariationcpu": functools.partial(_tvd_torch, gen=gen_torch_cpu),
-        "totalvariationdistancecpu": functools.partial(_tvd_torch, gen=gen_torch_cpu),
-        "jsdcuda": functools.partial(_jsd_torch, gen=gen_torch_cuda),
-        "jensenshannoncuda": functools.partial(_jsd_torch, gen=gen_torch_cuda),
-        "jensenshannondivergencecuda": functools.partial(
-            _jsd_torch, gen=gen_torch_cuda
-        ),
-        "jsdcpu": functools.partial(_jsd_torch, gen=gen_torch_cpu),
-        "jensenshannoncpu": functools.partial(_jsd_torch, gen=gen_torch_cpu),
-        "jensenshannondivergencecpu": functools.partial(_jsd_torch, gen=gen_torch_cpu),
+        "tvd": _tvd_torch,
+        "totalvariation": _tvd_torch,
+        "totalvariationdistance": _tvd_torch,
+        "jsd": _jsd_torch,
+        "jensenshannon": _jsd_torch,
+        "jensenshannondivergence": _jsd_torch,
         "kldiv": _KL_div_torch,
         "kldivergence": _KL_div_torch,
         "bhattacharyya": _bhattacharyya_torch,
