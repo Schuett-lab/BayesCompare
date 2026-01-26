@@ -5,9 +5,9 @@ from joblib import Parallel, delayed
 import multiprocessing as mp
 import pickle
 import tqdm
-
+from typing import Optional
 from BayesCompare import distances
-from BayesCompare.cov_utils import check_cov_normalized
+from BayesCompare.cov_utils import cov_trace_norm_sigma_N
 
 
 def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
@@ -111,7 +111,13 @@ def load_covs(full_filename):
 
 
 def measure_dist_parallel(
-    covs_dir, output_dir, mean=None, meas_name="TVD", num_workers=mp.cpu_count() - 1
+    covs_dir,
+    output_dir,
+    mean=None,
+    meas_name="TVD",
+    num_workers=mp.cpu_count() - 1,
+    noise_var: Optional[float] = None,
+    b: float = 1 / 100,
 ):
     """
     Compute pairwise distances between covariance matrices in parallel and save results to disk.
@@ -141,6 +147,14 @@ def measure_dist_parallel(
         Number of worker processes for parallel computation. By default this is set to
         (number of CPUs - 1). Must be >= 1. The function uses joblib.Parallel with the
         "loky" backend to dispatch work.
+    noise_var : float, optional
+        Noise variance to be applied in the normalization if the matrices are not already normalized.
+        If None, noise_var is computed from the number of images (dim) used to obtain the cov matrix and
+        the parameter `b` using the formula
+        noise_var = (dim * b) / (1 + (dim * b)). Default is None.
+    b: float, optional
+        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is
+        1/100.
 
     Returns
     -------
@@ -170,15 +184,12 @@ def measure_dist_parallel(
     if isinstance(meas_name, str):
         meas_name = [meas_name]
 
+    if noise_var == None:
+        dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+        noise_var = dim * b / (1 + (dim * b))
+
     covs, covs_filename = load_covs(covs_dir)
-
-    ### Commenting out the normalization check for now but this will be discussed.
-    # randomly select one cov matrix from the list and check normalization
-    # idx = np.random.randint(len(covs))
-    # assert check_cov_normalized(
-    #     covs[idx]
-    # ), "Invalid Operation: covariance matrices has to be trace normalized."
-
+    covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
     N = len(covs)
 
     for name in meas_name:
@@ -191,7 +202,6 @@ def measure_dist_parallel(
             print("Distance already calculated")
 
         else:
-
             with mp.Manager() as manager:
 
                 output_queue = manager.Queue(2 * num_workers)
@@ -202,7 +212,6 @@ def measure_dist_parallel(
                 writer_proc.start()
 
                 def pairwise_dist(i, j):
-
                     val = measure(covs[i], covs[j])
                     output_queue.put((i, j, val))
 

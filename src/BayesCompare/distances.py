@@ -4,7 +4,6 @@ from scipy.linalg.blas import dtrmm as mm
 import tqdm
 import re
 import torch
-import functools
 from scipy.linalg import cho_factor, cho_solve
 from typing import Sequence, Union, Optional
 
@@ -21,7 +20,6 @@ from .others import (
     _rsa_acos_torch,
 )
 from .cov_utils import (
-    check_cov_normalized,
     cov_trace_norm_sigma_N,
     check_cov_symmetry,
     check_and_change_input_format,
@@ -538,28 +536,21 @@ def measure_dist(
     >>> dist_matrix = measure_dist(cov_list, meas_name="TVD")
     """
 
-    covs, N, module = check_and_change_input_format(covs)
-
     if noise_var == None:
         dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
         noise_var = dim * b / (1 + (dim * b))
 
-    meas_name = simplify_string(meas_name)
+    covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
+    covs, N, module = check_and_change_input_format(covs)
 
     idx = np.random.randint(len(covs))
-    normalized = check_cov_normalized(covs[idx])
-
-    if not normalized and meas_name in DISTANCES["ours"]:
-        covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
-
-    # is it okay to check the symmetry of only one randomly chosen matrix or should I check all matrices in covs?
     symmetric = check_cov_symmetry(covs[idx])
-
     if not symmetric:
         raise ValueError(
             f"Covariance matrices should be symmetric! The covariance matrix at index {idx} violates this condition."
         )
 
+    meas_name = simplify_string(meas_name)
     measure = select_measure(covs[0], meas_name, module=module)
 
     dist = module.zeros((N, N))
@@ -567,22 +558,20 @@ def measure_dist(
     progress_bar = tqdm.tqdm(total=int((N * (N - 1)) / 2), disable=not show_progress)
 
     for i, ci in enumerate(covs):
-
         for j, cj in enumerate(covs):
 
             if j > i:
-
                 if "tvd" in meas_name or "jsd" in meas_name:
                     dist[i, j] = measure(
                         ci, cj, num_samples=samples_jsd_tvd, gen=generator
                     )  # not using mean, for a generalized code mean should be provided
+
                 else:
                     dist[i, j] = measure(
                         ci, cj
                     )  # not using mean, for a generalized code mean should be provided
 
                 dist[j, i] = dist[i, j]
-
                 progress_bar.update(1)
 
     return dist
@@ -641,7 +630,6 @@ def select_measure(cov_mtx, meas_name, module=None):
     meas_name = simplify_string(meas_name)
 
     if module == np:
-
         try:
             measure = REGISTRY["numpy"][meas_name]
 
@@ -651,7 +639,6 @@ def select_measure(cov_mtx, meas_name, module=None):
             )
 
     elif module == torch:
-
         try:
             measure = REGISTRY["torch"][meas_name]
 
