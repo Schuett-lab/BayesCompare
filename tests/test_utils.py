@@ -3,113 +3,112 @@ import torch
 import pathlib
 import os
 import glob
+import pytest
 from BayesCompare import cov_utils
 from numpy.testing import assert_allclose
 from torch.testing import assert_close
-import unittest
-from parameterized import parameterized
 
 
-class TestUtilsN(unittest.TestCase):
+@pytest.fixture()
+def inputs():
+    home_path = pathlib.Path.home()
+    sample_path = os.path.join(home_path, "Documents/BayesCompare/tests/sample_data")
+    input_args = {}
+    for input_file in ["utils_covs_np", "utils_covs_th"]:
+        filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
+        file_ext = pathlib.Path(filename).suffix
 
-    def setUp(self):
-        home_path = pathlib.Path.home()
-        sample_path = os.path.join(
-            home_path, "Documents/BayesCompare/tests/sample_data"
+        if file_ext == ".npy":
+            sample_file = np.load(filename)
+        elif file_ext == ".pt":
+            sample_file = torch.load(filename)
+        else:
+            return NotImplementedError("Input file type not implemented for loading")
+
+        input_args[input_file] = sample_file
+
+    return input_args
+
+
+def test_trace_norm_N(inputs):
+
+    single_output_np = []
+    single_output_th = []
+    for cov in inputs["utils_covs_np"]:
+        single_output_np.append(cov_utils.trace_norm(cov))
+    for cov in inputs["utils_covs_th"]:
+        single_output_th.append(cov_utils.trace_norm(cov))
+
+    single_output_np = np.array(single_output_np)
+    single_output_th = torch.stack(single_output_th, dim=0)
+
+    batch_output_np = cov_utils.trace_norm_N(inputs["utils_covs_np"])
+    batch_output_th = cov_utils.trace_norm_N(inputs["utils_covs_th"])
+
+    idx = np.random.randint(len(batch_output_np))
+
+    assert cov_utils.check_cov_normalized(single_output_np[idx, :, :])
+    assert cov_utils.check_cov_normalized(single_output_th[idx, :, :])
+    assert cov_utils.check_cov_normalized(batch_output_np[idx, :, :])
+    assert cov_utils.check_cov_normalized(batch_output_th[idx, :, :])
+
+    assert_allclose(single_output_np, batch_output_np, rtol=1e-4, atol=1e-4)
+    assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=1e-4)
+
+
+def test_cov_sigma_N(inputs):
+
+    noise_var = 0.3
+    signal_var = 0.1
+    single_output_np = []
+    single_output_th = []
+    for cov in inputs["utils_covs_np"]:
+        single_output_np.append(
+            cov_utils.cov_sigma(cov, noise_var=noise_var, signal_var=signal_var)
         )
-        self.input_args = {}
-        for input_file in ["utils_covs_np", "utils_covs_th"]:
-            filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
-            file_ext = pathlib.Path(filename).suffix
-
-            if file_ext == ".npy":
-                sample_file = np.load(filename)
-            elif file_ext == ".pt":
-                sample_file = torch.load(filename)
-            else:
-                return NotImplementedError(
-                    "Input file type not implemented for loading"
-                )
-
-            self.input_args[input_file] = sample_file
-
-    def test_trace_norm_N(self):
-
-        single_output_np = []
-        single_output_th = []
-        for cov in self.input_args["utils_covs_np"]:
-            single_output_np.append(cov_utils.trace_norm(cov))
-        for cov in self.input_args["utils_covs_th"]:
-            single_output_th.append(cov_utils.trace_norm(cov))
-
-        single_output_np = np.array(single_output_np)
-        single_output_th = torch.stack(single_output_th, dim=0)
-
-        batch_output_np = cov_utils.trace_norm_N(self.input_args["utils_covs_np"])
-        batch_output_th = cov_utils.trace_norm_N(self.input_args["utils_covs_th"])
-
-        idx = np.random.randint(len(batch_output_np))
-
-        assert cov_utils.check_cov_normalized(single_output_np[idx, :, :])
-        assert cov_utils.check_cov_normalized(single_output_th[idx, :, :])
-        assert cov_utils.check_cov_normalized(batch_output_np[idx, :, :])
-        assert cov_utils.check_cov_normalized(batch_output_th[idx, :, :])
-
-        assert_allclose(single_output_np, batch_output_np, rtol=1e-4, atol=1e-4)
-        assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=1e-4)
-
-    def test_cov_sigma_N(self):
-
-        noise_var = 0.3
-        signal_var = 0.1
-        single_output_np = []
-        single_output_th = []
-        for cov in self.input_args["utils_covs_np"]:
-            single_output_np.append(
-                cov_utils.cov_sigma(cov, noise_var=noise_var, signal_var=signal_var)
-            )
-        for cov in self.input_args["utils_covs_th"]:
-            single_output_th.append(
-                cov_utils.cov_sigma(cov, noise_var=noise_var, signal_var=signal_var)
-            )
-
-        single_output_np = np.array(single_output_np)
-        single_output_th = torch.stack(single_output_th, dim=0)
-
-        batch_output_np = cov_utils.cov_sigma_N(
-            self.input_args["utils_covs_np"], noise_var=noise_var, signal_var=signal_var
-        )
-        batch_output_th = cov_utils.cov_sigma_N(
-            self.input_args["utils_covs_th"], noise_var=noise_var, signal_var=signal_var
+    for cov in inputs["utils_covs_th"]:
+        single_output_th.append(
+            cov_utils.cov_sigma(cov, noise_var=noise_var, signal_var=signal_var)
         )
 
-        assert_allclose(single_output_np, batch_output_np, rtol=1e-4, atol=1e-4)
-        assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=1e-4)
+    single_output_np = np.array(single_output_np)
+    single_output_th = torch.stack(single_output_th, dim=0)
 
-    def test_cov_trace_norm_sigma_N(self):
+    batch_output_np = cov_utils.cov_sigma_N(
+        inputs["utils_covs_np"], noise_var=noise_var, signal_var=signal_var
+    )
+    batch_output_th = cov_utils.cov_sigma_N(
+        inputs["utils_covs_th"], noise_var=noise_var, signal_var=signal_var
+    )
 
-        noise_var = 0.1
-        single_output_np = []
-        single_output_th = []
+    assert_allclose(single_output_np, batch_output_np, rtol=1e-4, atol=1e-4)
+    assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=1e-4)
 
-        for cov in self.input_args["utils_covs_np"]:
-            single_output_np.append(
-                cov_utils.cov_sigma(cov_utils.trace_norm(cov), noise_var=noise_var)
-            )
-        for cov in self.input_args["utils_covs_th"]:
-            single_output_th.append(
-                cov_utils.cov_sigma(cov_utils.trace_norm(cov), noise_var=noise_var)
-            )
 
-        single_output_np = np.array(single_output_np)
-        single_output_th = torch.stack(single_output_th, dim=0)
+def test_cov_trace_norm_sigma_N(inputs):
 
-        batch_output_np = cov_utils.cov_trace_norm_sigma_N(
-            self.input_args["utils_covs_np"], noise_var=noise_var
+    noise_var = 0.1
+    single_output_np = []
+    single_output_th = []
+
+    for cov in inputs["utils_covs_np"]:
+        single_output_np.append(
+            cov_utils.cov_sigma(cov_utils.trace_norm(cov), noise_var=noise_var)
         )
-        batch_output_th = cov_utils.cov_trace_norm_sigma_N(
-            self.input_args["utils_covs_th"], noise_var=noise_var
+    for cov in inputs["utils_covs_th"]:
+        single_output_th.append(
+            cov_utils.cov_sigma(cov_utils.trace_norm(cov), noise_var=noise_var)
         )
 
-        assert_allclose(single_output_np, batch_output_np, rtol=1e-4, atol=1e-4)
-        assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=1e-4)
+    single_output_np = np.array(single_output_np)
+    single_output_th = torch.stack(single_output_th, dim=0)
+
+    batch_output_np = cov_utils.cov_trace_norm_sigma_N(
+        inputs["utils_covs_np"], noise_var=noise_var
+    )
+    batch_output_th = cov_utils.cov_trace_norm_sigma_N(
+        inputs["utils_covs_th"], noise_var=noise_var
+    )
+
+    assert_allclose(single_output_np, batch_output_np, rtol=1e-4, atol=1e-4)
+    assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=1e-4)
