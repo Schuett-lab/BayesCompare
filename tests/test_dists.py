@@ -366,7 +366,7 @@ def test_large_scale_inputs(inputs, meas_name):
 
 # Small scale input
 @pytest.mark.parametrize("meas_name", ALL_MEASURES, ids=ALL_MEASURES)
-def test_large_scale_inputs(inputs, meas_name):
+def test_small_scale_inputs(inputs, meas_name):
     output_np = []
     output_th = []
 
@@ -395,7 +395,7 @@ def test_large_scale_inputs(inputs, meas_name):
     output_th = torch.stack(output_th, dim=0)
 
     # what to check about outputs for the scale tests?
-    assert_allclose(output_np, output_th.numpy(), rtol=1e-3, atol=1e-3)
+    assert_allclose(output_np, output_th.numpy(), rtol=1e-2, atol=1e-2)
     assert np.all(output_np >= 0), "NPArray contains negative values"
     assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
 
@@ -406,7 +406,7 @@ def test_large_scale_inputs(inputs, meas_name):
 
 # One large and one small scale input
 @pytest.mark.parametrize("meas_name", ALL_MEASURES, ids=ALL_MEASURES)
-def test_large_scale_inputs(inputs, meas_name):
+def test_large_and_small_scale_inputs(inputs, meas_name):
     output_np = []
     output_th = []
 

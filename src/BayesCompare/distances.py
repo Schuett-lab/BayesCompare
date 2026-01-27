@@ -461,6 +461,8 @@ def _bhattacharyya_numpy(sigma1, sigma2, mu1=None, mu2=None):
 
     d = (1 / 8) * means_term + (1 / 2) * log_term
 
+    d = check_small_negative(d)
+
     return d
 
 
@@ -472,6 +474,8 @@ def _bhattacharyya_torch(sigma1, sigma2, mu1=None, mu2=None):
     )  # these may also require float64 casting
 
     d = (1 / 8) * means_term + (1 / 2) * log_term
+
+    d = check_small_negative(d)
 
     return d
 
@@ -660,12 +664,33 @@ def select_measure(cov_mtx, meas_name, module=None):
     return measure
 
 
-def check_small_negative(d_sq):
+def check_small_negative(d):
 
-    if d_sq < 0 and d_sq > -1e-7:
-        d_sq = 0
+    epsilon = 1e-7
 
-    return d_sq
+    # Python / NumPy scalar
+    if isinstance(d, (int, float, np.floating)):
+        return 0.0 if (-epsilon < d < 0) else d
+
+    # NumPy array
+    if isinstance(d, np.ndarray):
+        if -epsilon < d[0] < 0:
+            d[0] = 0
+        return d
+
+    # Torch tensor
+    if isinstance(d, torch.Tensor):
+
+        if d.ndim == 0:
+            if -epsilon < d < 0:
+                d[()] = 0
+        else:
+            if -epsilon < d[0] < 0:
+                d[0] = 0
+
+        return d
+
+    return d
 
 
 DISTANCES = {
