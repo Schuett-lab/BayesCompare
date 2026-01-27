@@ -5,9 +5,14 @@ from joblib import Parallel, delayed
 import multiprocessing as mp
 import pickle
 import tqdm
-from typing import Optional
+import torch
+from typing import Optional, Sequence, Union
 from BayesCompare import distances
-from BayesCompare.cov_utils import cov_trace_norm_sigma_N, check_cov_normalized
+from BayesCompare.cov_utils import (
+    cov_trace_norm_sigma_N,
+    check_cov_normalized,
+    check_cov_symmetry,
+)
 
 
 def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
@@ -111,13 +116,15 @@ def load_covs(full_filename):
 
 
 def measure_dist_parallel(
-    covs_dir,
-    output_dir,
+    covs_dir: str,
+    output_dir: str,
     mean=None,
-    meas_name="TVD",
-    num_workers=mp.cpu_count() - 1,
+    meas_name: Sequence[str] = ["TVD"],
     noise_var: Optional[float] = None,
     b: float = 1 / 100,
+    samples_jsd_tvd: int = 10000,
+    generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
+    num_workers: int = mp.cpu_count() - 1,
 ):
     """
     Compute pairwise distances between covariance matrices in parallel and save results to disk.
@@ -224,7 +231,12 @@ def measure_dist_parallel(
                 writer_proc.start()
 
                 def pairwise_dist(i, j):
-                    val = measure(covs[i], covs[j])
+                    if "tvd" in name or "jsd" in name:
+                        val = measure(
+                            covs[i], covs[j], num_samples=samples_jsd_tvd, gen=generator
+                        )
+                    else:
+                        val = measure(covs[i], covs[j])
                     output_queue.put((i, j, val))
 
                 Parallel(n_jobs=num_workers, backend="loky", verbose=0)(
