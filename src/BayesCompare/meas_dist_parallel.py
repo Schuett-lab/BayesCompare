@@ -184,12 +184,24 @@ def measure_dist_parallel(
     if isinstance(meas_name, str):
         meas_name = [meas_name]
 
+    covs, covs_filename = load_covs(covs_dir)
+
     if noise_var == None:
         dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
         noise_var = dim * b / (1 + (dim * b))
 
-    covs, covs_filename = load_covs(covs_dir)
-    covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
+    idx = np.random.randint(len(covs))
+    normalized = check_cov_normalized(covs[idx])
+
+    if not normalized and meas_name in DISTANCES["ours"]:
+        covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
+
+    symmetric = check_cov_symmetry(covs[idx])
+    if not symmetric:
+        raise ValueError(
+            f"Covariance matrices should be symmetric! The covariance matrix at index {idx} violates this condition."
+        )
+
     N = len(covs)
 
     for name in meas_name:

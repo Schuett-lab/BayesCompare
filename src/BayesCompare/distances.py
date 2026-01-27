@@ -540,10 +540,14 @@ def measure_dist(
         dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
         noise_var = dim * b / (1 + (dim * b))
 
-    covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
+    idx = np.random.randint(len(covs))
+    normalized = check_cov_normalized(covs[idx])
+
+    if not normalized and meas_name in DISTANCES["ours"]:
+        covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
+
     covs, N, module = check_and_change_input_format(covs)
 
-    idx = np.random.randint(len(covs))
     symmetric = check_cov_symmetry(covs[idx])
     if not symmetric:
         raise ValueError(
