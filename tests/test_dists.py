@@ -119,6 +119,7 @@ def test_same_input(inputs, meas_name):
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
             show_progress=False,
+            generator=np.random.Generator(np.random.SFC64(124)),
         )
     )
     output_th.append(
@@ -130,6 +131,7 @@ def test_same_input(inputs, meas_name):
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
             show_progress=False,
+            generator=torch.Generator(device="cpu").manual_seed(124),
         )
     )
 
@@ -160,6 +162,7 @@ def test_similar_input(inputs, meas_name):
                 meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
                 show_progress=False,
+                generator=np.random.Generator(np.random.SFC64(124)),
             )
         )
         output_th.append(
@@ -168,6 +171,7 @@ def test_similar_input(inputs, meas_name):
                 meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
                 show_progress=False,
+                generator=torch.Generator(device="cpu").manual_seed(124),
             )
         )
 
@@ -205,6 +209,7 @@ def test_symmetric_inputs(inputs, meas_name):
                 meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
                 show_progress=False,
+                generator=np.random.Generator(np.random.SFC64(124)),
             )
         )
 
@@ -214,6 +219,7 @@ def test_symmetric_inputs(inputs, meas_name):
                 meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
                 show_progress=False,
+                generator=torch.Generator(device="cpu").manual_seed(124),
             )
         )
 
@@ -250,6 +256,7 @@ def test_psd_input(inputs, meas_name):
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
             show_progress=False,
+            generator=np.random.Generator(np.random.SFC64(124)),
         )
     )
     output_th.append(
@@ -258,6 +265,7 @@ def test_psd_input(inputs, meas_name):
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
             show_progress=False,
+            generator=torch.Generator(device="cpu").manual_seed(124),
         )
     )
 
@@ -289,6 +297,7 @@ def test_almost_psd_input(inputs, meas_name):
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
             show_progress=False,
+            generator=np.random.Generator(np.random.SFC64(124)),
         )
     )
     output_th.append(
@@ -297,6 +306,7 @@ def test_almost_psd_input(inputs, meas_name):
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
             show_progress=False,
+            generator=torch.Generator(device="cpu").manual_seed(124),
         )
     )
 
@@ -328,6 +338,7 @@ def test_large_scale_inputs(inputs, meas_name):
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
             show_progress=False,
+            generator=np.random.Generator(np.random.SFC64(124)),
         )
     )
     output_th.append(
@@ -336,6 +347,7 @@ def test_large_scale_inputs(inputs, meas_name):
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
             show_progress=False,
+            generator=torch.Generator(device="cpu").manual_seed(124),
         )
     )
 
@@ -366,6 +378,7 @@ def test_large_scale_inputs(inputs, meas_name):
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
             show_progress=False,
+            generator=np.random.Generator(np.random.SFC64(124)),
         )
     )
     output_th.append(
@@ -374,6 +387,7 @@ def test_large_scale_inputs(inputs, meas_name):
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
             show_progress=False,
+            generator=torch.Generator(device="cpu").manual_seed(124),
         )
     )
 
@@ -406,6 +420,7 @@ def test_large_scale_inputs(inputs, meas_name):
                 meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
                 show_progress=False,
+                generator=np.random.Generator(np.random.SFC64(124)),
             )
         )
         output_th.append(
@@ -414,6 +429,7 @@ def test_large_scale_inputs(inputs, meas_name):
                 meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
                 show_progress=False,
+                generator=torch.Generator(device="cpu").manual_seed(124),
             )
         )
 
