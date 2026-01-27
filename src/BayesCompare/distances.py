@@ -486,7 +486,7 @@ def measure_dist(
     meas_name: str = "TVD",
     noise_var: Optional[float] = None,
     b: float = 1 / 100,
-    samples_jsd_tvd=10000,
+    samples_jsd_tvd: int = 10000,
     show_progress: Optional[bool] = True,
     generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
 ):
