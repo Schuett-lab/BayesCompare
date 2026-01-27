@@ -24,6 +24,7 @@ from .cov_utils import (
     check_cov_symmetry,
     check_and_change_input_format,
     check_input_format,
+    check_cov_normalized,
 )
 
 

@@ -7,7 +7,7 @@ import pickle
 import tqdm
 from typing import Optional
 from BayesCompare import distances
-from BayesCompare.cov_utils import cov_trace_norm_sigma_N
+from BayesCompare.cov_utils import cov_trace_norm_sigma_N, check_cov_normalized
 
 
 def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
