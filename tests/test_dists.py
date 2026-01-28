@@ -272,7 +272,6 @@ def test_psd_input(inputs, meas_name):
     output_np = np.stack(output_np, axis=0)
     output_th = torch.stack(output_th, dim=0)
 
-    # what to check about outputs for the psd tests?
     assert_allclose(output_np, output_th.numpy(), rtol=0.05, atol=0.05)
     assert np.all(output_np >= 0), "NPArray contains negative values"
     assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
@@ -313,7 +312,6 @@ def test_almost_psd_input(inputs, meas_name):
     output_np = np.stack(output_np, axis=0)
     output_th = torch.stack(output_th, dim=0)
 
-    # what to check about outputs for the psd tests?
     if not ("jsd" in meas_name or "tvd" in meas_name):
         assert_allclose(output_np, output_th.numpy(), rtol=1e-2, atol=1e-2)
     assert np.all(output_np >= 0), "NPArray contains negative values"
@@ -354,7 +352,6 @@ def test_large_scale_inputs(inputs, meas_name):
     output_np = np.stack(output_np, axis=0)
     output_th = torch.stack(output_th, dim=0)
 
-    # what to check about outputs for the scale tests?
     assert_allclose(output_np, output_th.numpy(), rtol=1e-2, atol=1e-2)
     assert np.all(output_np >= 0), "NPArray contains negative values"
     assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
@@ -394,7 +391,6 @@ def test_small_scale_inputs(inputs, meas_name):
     output_np = np.stack(output_np, axis=0)
     output_th = torch.stack(output_th, dim=0)
 
-    # what to check about outputs for the scale tests?
     assert_allclose(output_np, output_th.numpy(), rtol=1e-2, atol=1e-2)
     assert np.all(output_np >= 0), "NPArray contains negative values"
     assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
@@ -436,7 +432,6 @@ def test_large_and_small_scale_inputs(inputs, meas_name):
     output_np = np.stack(output_np, axis=0)
     output_th = torch.stack(output_th, dim=0)
 
-    # what to check about outputs for the scale tests?
     assert_allclose(output_np, output_th.numpy(), rtol=1e-2, atol=1e-2)
     assert np.all(output_np >= 0), "NPArray contains negative values"
     assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
@@ -444,3 +439,46 @@ def test_large_and_small_scale_inputs(inputs, meas_name):
     if "jsd" in meas_name or "tvd" in meas_name or "hellinger" in meas_name:
         assert np.all(output_np <= 1)
         assert torch.all(output_th <= 1)
+
+
+@pytest.mark.parametrize("meas_name", ALL_MEASURES, ids=ALL_MEASURES)
+def test_same_input_twice_determinism(inputs, meas_name):
+
+    num_samples = NUM_SAMPLES
+
+    pair = inputs["test_symmetric_inputs_data"][0]
+
+    output_1_np = distances.measure_dist(
+        [pair[0], pair[1]],
+        meas_name=meas_name,
+        samples_jsd_tvd=num_samples,
+        show_progress=False,
+        generator=np.random.Generator(np.random.SFC64(124)),
+    )
+
+    output_2_np = distances.measure_dist(
+        [pair[0], pair[1]],
+        meas_name=meas_name,
+        samples_jsd_tvd=num_samples,
+        show_progress=False,
+        generator=np.random.Generator(np.random.SFC64(124)),
+    )
+
+    output_1_th = distances.measure_dist(
+        [torch.from_numpy(pair[0]), torch.from_numpy(pair[1])],
+        meas_name=meas_name,
+        samples_jsd_tvd=num_samples,
+        show_progress=False,
+        generator=torch.Generator(device="cpu").manual_seed(124),
+    )
+
+    output_2_th = distances.measure_dist(
+        [torch.from_numpy(pair[0]), torch.from_numpy(pair[1])],
+        meas_name=meas_name,
+        samples_jsd_tvd=num_samples,
+        show_progress=False,
+        generator=torch.Generator(device="cpu").manual_seed(124),
+    )
+
+    assert_allclose(output_1_np, output_2_np, rtol=1e-7, atol=1e-7)
+    assert_close(output_1_th, output_2_th, rtol=1e-7, atol=1e-7)
