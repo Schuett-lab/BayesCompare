@@ -6,13 +6,16 @@ Authors: Juan Jesús Torre Tresols, Sezan Oral, Heiko Schütt
 import torch
 import numpy as np
 
+from typing import Sequence, Union, Optional
 from numpy.typing import NDArray
 
 
 def trace_norm(cov: NDArray | torch.Tensor) -> NDArray | torch.Tensor:
     """Normalize the covariance to have trace equal to its shape"""
 
-    cov_norm = cov * cov.shape[0] / np.trace(cov)
+    module = check_input_format(cov)
+
+    cov_norm = cov * cov.shape[0] / module.trace(cov)
 
     return cov_norm
 
@@ -48,9 +51,123 @@ def cov_sigma(
     if not signal_var:
         signal_var = 1 - noise_var
 
-    cov_sigma = signal_var * cov + noise_var * np.eye(cov.shape[0])
+    module = check_input_format(cov)
+
+    cov_sigma = signal_var * cov + noise_var * module.eye(cov.shape[0])
 
     return cov_sigma
+
+
+def cov_sigma_N(
+    covs: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
+    noise_var: float,
+    signal_var: Optional[float] = None,
+) -> Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]:
+    """
+    Computes the covariance matrix with added noise variance.
+
+    This function takes a covariance matrix or a sequence of covariance matrices and
+    computes a new covariance matrix that incorporates noise variance and an optional
+    signal variance.
+
+    Args:
+        covs (Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]):
+            A covariance matrix or a sequence of covariance matrices.
+        noise_var (float) : The variance of the noise to be added.
+        signal_var (Optional[float]) : The variance of the signal. If None, it is set to
+            (1 - noise_var).
+
+    Returns:
+        cov_sigma_out (Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]):
+            The modified covariance matrix or a sequence of modified covariance matrices
+            with added noise and signal variance.
+    """
+
+    if not signal_var:
+        signal_var = 1 - noise_var
+
+    if isinstance(covs, (list, tuple)):
+        cov_sigma_out = []
+        for cov in covs:
+            cov_sigma_out.append(
+                cov_sigma(cov, noise_var=noise_var, signal_var=signal_var)
+            )
+
+    else:
+        module = check_input_format(covs)
+
+        cov_sigma_out = signal_var * covs + (
+            noise_var * module.eye(covs.shape[-1])[None, ...]
+        )
+
+    return cov_sigma_out
+
+
+def trace_norm_N(
+    covs: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
+) -> Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]:
+    """
+    Normalize N covariance matrices by trace norm.
+
+    Parameters
+    ----------
+    covs : Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]
+        A covariance matrix or batch of covariance matrices, or a sequence thereof.
+        If a sequence, each element is independently normalized.
+        Expected shape for batch: (batch, n, n)
+
+    Returns
+    -------
+    cov_norm : Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]
+        Trace-normalized covariance matrices with the same type and shape as input.
+    """
+
+    if isinstance(covs, (list, tuple)):
+        cov_norm = []
+        for cov in covs:
+            cov_norm.append(trace_norm(cov))
+    else:
+        module = check_input_format(covs)
+
+        if module == np:
+            denominator = covs.diagonal(offset=0, axis1=-1, axis2=-2).sum(-1)[
+                :, None, None
+            ]
+        elif module == torch:
+            denominator = covs.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)[
+                :, None, None
+            ]
+
+        cov_norm = covs * covs.shape[-1] / denominator
+
+    return cov_norm
+
+
+def cov_trace_norm_sigma_N(
+    covs: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
+    noise_var: float,
+    signal_var: Optional[float] = None,
+) -> Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]:
+    """
+    Computes the normalized and noise added covariance matrices based on the trace norm and given noise variance.
+    Args:
+        covs (Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]):
+            A sequence of covariance matrices or a single covariance matrix, which can be either
+            a NumPy ndarray or a PyTorch tensor or a list of those types.
+        noise_var (float):
+            The variance of the noise to be added.
+        signal_var (Optional[float], optional):
+            The variance of the signal. If None, it is set to (1 - noise_var).
+    Returns:
+        normed_sigma_covs: (Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor]):
+            Resulting covariances after applying the trace norm and the specified noise and signal variances.
+    """
+
+    normed_sigma_covs = cov_sigma_N(
+        trace_norm_N(covs), noise_var=noise_var, signal_var=signal_var
+    )
+
+    return normed_sigma_covs
 
 
 def check_cov_normalized(cov: NDArray | torch.Tensor, tolerance=1e-4) -> bool:
@@ -61,3 +178,97 @@ def check_cov_normalized(cov: NDArray | torch.Tensor, tolerance=1e-4) -> bool:
     trace_cov = cov.trace()
 
     return abs(trace_cov - len(cov)) < tolerance
+
+
+def check_cov_symmetry(cov_mtx, rtol=1e-05, atol=1e-08):
+    """
+    Check if the given covariance is trace symmetric up to a tolerance point.
+    """
+
+    module = check_input_format(cov_mtx)
+    return module.allclose(cov_mtx, cov_mtx.T, rtol=rtol, atol=atol)
+
+
+def check_input_format(input):
+    """
+    Determines the appropriate numerical library module for the input data type.
+
+    Parameters
+    ----------
+    input : torch.Tensor or np.ndarray
+        The input data to check.
+
+    Returns
+    -------
+    module : type
+        torch if input is a torch.Tensor, np if input is a np.ndarray.
+    """
+    if isinstance(input, torch.Tensor):
+        return torch
+    elif isinstance(input, np.ndarray):
+        return np
+    raise TypeError("Input must be a Numpy array or a PyTorch tensor.")
+
+
+def check_and_change_input_format(
+    input: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
+):
+    """
+    Changes given input matrix or tuple/list of matrices into a list of matrices.
+
+    Accepts either a list/tuple of square matrices with shape ``(dim, dim)``,
+    or a NumPy array / PyTorch tensor with shape ``(N, dim, dim)``.
+
+    Parameters
+    ----------
+    input : list/tuple of np.ndarray or list of torch.Tensor or np.ndarray or torch.Tensor
+        Input matrices in one of the supported formats.
+
+    Returns
+    -------
+    modified_input : iterable
+        Iterable yielding a list of length ``N``, consisting of matrices of shape ``(dim, dim)``.
+
+    N : int
+        Number of matrices.
+
+    module : type
+        torch if input is a torch.Tensor, np if input is a np.ndarray or the respective type if a list of either of these types.
+
+    Raises
+    ------
+    ValueError
+        If the input is empty or contains only one square matrix.
+        If the input is contains non-square matrices.
+
+    TypeError
+        If the input type or dimensionality is unsupported.
+    """
+
+    if isinstance(input, (list, tuple)):
+        if len(input) == 0:
+            raise ValueError("Input list is empty.")
+        elif len(input) == 1:
+            raise ValueError("Covariance list has to have more than 1 matrix.")
+        module = check_input_format(input[0])
+        return list(input), len(input), module
+
+    elif hasattr(input, "ndim"):
+        if input.ndim == 2:
+            raise ValueError("Covariance tensor has to have more than 1 matrix.")
+        elif input.ndim == 3:
+            N, d1, d2 = input.shape
+            if N == 1:
+                raise ValueError("Covariance tensor has to have more than 1 matrix.")
+            if d1 != d2:
+                raise ValueError(
+                    f"Expected shape (N, dim, dim), but got {input.shape}: "
+                    "last two dimensions must be equal."
+                )
+            module = check_input_format(input)
+            return [input[i] for i in range(N)], N, module
+
+    raise TypeError(
+        "Input must be a tuple/list of (dim, dim) matrices "
+        "or an array/tensor of shape (N, dim, dim) with N>1."
+    )

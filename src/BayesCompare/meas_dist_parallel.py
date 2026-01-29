@@ -5,14 +5,21 @@ from joblib import Parallel, delayed
 import multiprocessing as mp
 import pickle
 import tqdm
-
-from BayesCompare import distances as dist
-from BayesCompare.cov_utils import check_cov_normalized
+import torch
+from typing import Optional, Sequence, Union
+from BayesCompare.distances import DISTANCES, simplify_string, select_measure
+from BayesCompare.cov_utils import (
+    cov_trace_norm_sigma_N,
+    check_cov_normalized,
+    check_cov_symmetry,
+)
 
 
 def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
 
+    print(f"Now computing {measure_name}")
     # convention for the name of the distance HDF5 files is: dist_<covs_list_filename>_<measure_name>.hdf5
+    measure_name = simplify_string(measure_name)
     hdf_filename = (
         os.path.join(hdf_dir, "") + "dist_" + covs_name + "_" + measure_name + ".hdf5"
     )
@@ -36,6 +43,7 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
 
             init_mtx = np.empty((N, N))
             init_mtx[:] = np.nan
+            np.fill_diagonal(init_mtx, 0)
 
             dist_dset = f.create_dataset("dist", shape=(N, N), data=init_mtx)
             indices = [(i, j) for j in range(N) for i in range(j + 1, N)]
@@ -83,14 +91,19 @@ def load_covs(full_filename):
         with open(full_filename, "rb") as f:
             covs_names = pickle.load(f)
 
-        covs = []
+        if isinstance(covs_names, list) and isinstance(covs_names[0], dict):
+            covs = []
 
-        for cov_dict in covs_names:
+            for cov_dict in covs_names:
+                covs.append(list(cov_dict.values()))
 
-            covs.append(list(cov_dict.values()))
+            covs = np.stack(covs)
+            covs = covs.reshape(
+                covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3]
+            )
 
-        covs = np.stack(covs)
-        covs = covs.reshape(covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3])
+        if isinstance(covs_names, np.ndarray):
+            covs = covs_names
 
     elif ext in numpy_exts:
 
@@ -103,7 +116,15 @@ def load_covs(full_filename):
 
 
 def measure_dist_parallel(
-    covs_dir, output_dir, mean=None, meas_name="TVD", num_workers=mp.cpu_count() - 1
+    covs_dir: str,
+    output_dir: str,
+    mean=None,
+    meas_name: Sequence[str] = ["TVD"],
+    noise_var: Optional[float] = None,
+    b: float = 1 / 100,
+    samples_jsd_tvd: int = 10000,
+    generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
+    num_workers: int = mp.cpu_count() - 1,
 ):
     """
     Compute pairwise distances between covariance matrices in parallel and save results to disk.
@@ -133,6 +154,14 @@ def measure_dist_parallel(
         Number of worker processes for parallel computation. By default this is set to
         (number of CPUs - 1). Must be >= 1. The function uses joblib.Parallel with the
         "loky" backend to dispatch work.
+    noise_var : float, optional
+        Noise variance to be applied in the normalization if the matrices are not already normalized.
+        If None, noise_var is computed from the number of images (dim) used to obtain the cov matrix and
+        the parameter `b` using the formula
+        noise_var = (dim * b) / (1 + (dim * b)). Default is None.
+    b: float, optional
+        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is
+        1/100.
 
     Returns
     -------
@@ -164,17 +193,27 @@ def measure_dist_parallel(
 
     covs, covs_filename = load_covs(covs_dir)
 
-    # randomly select one cov matrix from the list and check normalization
+    if noise_var == None:
+        dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+        noise_var = dim * b / (1 + (dim * b))
+
     idx = np.random.randint(len(covs))
-    assert check_cov_normalized(
-        covs[idx]
-    ), "Invalid Operation: covariance matrices has to be trace normalized."
+    normalized = check_cov_normalized(covs[idx])
+
+    if not normalized and meas_name in DISTANCES["ours"]:
+        covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
+
+    symmetric = check_cov_symmetry(covs[idx])
+    if not symmetric:
+        raise ValueError(
+            f"Covariance matrices should be symmetric! The covariance matrix at index {idx} violates this condition."
+        )
 
     N = len(covs)
 
     for name in meas_name:
 
-        measure = dist.select_measure(covs[0], name)
+        measure = select_measure(covs[0], name)
 
         indices, output_filename = check_saved_hdf(output_dir, N, covs_filename, name)
 
@@ -182,7 +221,6 @@ def measure_dist_parallel(
             print("Distance already calculated")
 
         else:
-
             with mp.Manager() as manager:
 
                 output_queue = manager.Queue(2 * num_workers)
@@ -193,8 +231,12 @@ def measure_dist_parallel(
                 writer_proc.start()
 
                 def pairwise_dist(i, j):
-
-                    val = measure(covs[i], covs[j])
+                    if "tvd" in name or "jsd" in name:
+                        val = measure(
+                            covs[i], covs[j], num_samples=samples_jsd_tvd, gen=generator
+                        )
+                    else:
+                        val = measure(covs[i], covs[j])
                     output_queue.put((i, j, val))
 
                 Parallel(n_jobs=num_workers, backend="loky", verbose=0)(

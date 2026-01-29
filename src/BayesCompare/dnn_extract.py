@@ -122,7 +122,7 @@ def get_layer_names(model: torch.nn.Module, get_graph: Optional[str] = "none"):
             model,
             mock_input,
             layers_to_save=None,
-            vis_opt="none",
+            vis_opt=get_graph,
             detach_saved_tensors=True,
         )
 
@@ -135,6 +135,7 @@ def cov_extractor(
     model: torch.nn.Module,
     layer_list: Union[List[str], str],
     inputs: Union[torch.Tensor, np.ndarray],
+    random_seed: int = 42,
 ):
     """
     Extracts covariance matrices from specified layers of a DNN model given input data.
@@ -161,9 +162,7 @@ def cov_extractor(
 
     get_cov_n = partial(get_cov, N=N)
 
-    # if model is not in eval mode, put it in eval mode
-    if model.training == True:
-        model.eval()
+    model.eval()
 
     with torch.inference_mode():
 
@@ -176,6 +175,7 @@ def cov_extractor(
             vis_opt="none",
             activation_postfunc=get_cov_n,
             detach_saved_tensors=True,
+            random_seed=random_seed,
         )
 
         covs[layer_list[0]] = model_history[layer_list[0]].tensor_contents
@@ -187,7 +187,7 @@ def cov_extractor(
             )
 
             model_history.save_new_activations(
-                model, inputs, layers_to_save=layer_list[1:]
+                model, inputs, layers_to_save=layer_list[1:], random_seed=random_seed
             )
 
             if len(model_history.layers_with_saved_activations) != len(layer_list) - 1:
