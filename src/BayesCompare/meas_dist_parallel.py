@@ -7,7 +7,7 @@ import pickle
 import tqdm
 import torch
 from typing import Optional, Sequence, Union
-from BayesCompare import distances
+from BayesCompare.distances import DISTANCES, simplify_string, select_measure
 from BayesCompare.cov_utils import (
     cov_trace_norm_sigma_N,
     check_cov_normalized,
@@ -19,7 +19,7 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
 
     print(f"Now computing {measure_name}")
     # convention for the name of the distance HDF5 files is: dist_<covs_list_filename>_<measure_name>.hdf5
-    measure_name = distances.simplify_string(measure_name)
+    measure_name = simplify_string(measure_name)
     hdf_filename = (
         os.path.join(hdf_dir, "") + "dist_" + covs_name + "_" + measure_name + ".hdf5"
     )
@@ -213,7 +213,7 @@ def measure_dist_parallel(
 
     for name in meas_name:
 
-        measure = distances.select_measure(covs[0], name)
+        measure = select_measure(covs[0], name)
 
         indices, output_filename = check_saved_hdf(output_dir, N, covs_filename, name)
 
