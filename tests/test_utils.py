@@ -11,8 +11,7 @@ from torch.testing import assert_close
 
 @pytest.fixture()
 def inputs():
-    home_path = pathlib.Path.home()
-    sample_path = os.path.join(home_path, "Documents/BayesCompare/tests/sample_data")
+    sample_path = os.path.join(os.getcwd(), "tests/sample_data")
     input_args = {}
     for input_file in ["utils_covs_np", "utils_covs_th"]:
         filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
@@ -112,3 +111,20 @@ def test_cov_trace_norm_sigma_N(inputs):
 
     assert_allclose(single_output_np, batch_output_np, rtol=1e-4, atol=1e-4)
     assert_close(single_output_th, batch_output_th, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.parametrize("weighted", [False, True], ids=["unweighted", "weighted"])
+def test_sigma_cov(inputs, weighted):
+    norm_cov = cov_utils.trace_norm(inputs["utils_covs_np"][0])
+    noise_var = 0.5
+    if weighted:
+        weights = np.random.randint(1, 4, n=norm_cov.shape[0])
+        noise_weights = np.diag(1 / weights)
+    else:
+        weights = None
+        noise_weights = np.eye(norm_cov.shape[0])
+
+    expected = (1 - noise_var) * norm_cov + noise_var * noise_weights
+    result = cov_utils.cov_sigma(norm_cov, noise_var=noise_var, img_weights=weights)
+
+    assert_allclose(result, expected, rtol=1e-4, atol=1e-4)
