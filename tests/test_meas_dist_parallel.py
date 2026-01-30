@@ -37,34 +37,31 @@ def test_meas_dist_parallel(meas_name):
 
     generator = np.random.Generator(np.random.SFC64(124))
 
-    cov_input_dir = os.path.join(
-        home_path,
-        "Documents/BayesCompare/tests/sample_data/test_input_meas_dist_parallel.pkl",
+    cov_input_file = os.path.join(
+        os.getcwd(),
+        "tests/sample_data/test_input_meas_dist_parallel.pkl",
     )
 
+    output_dir = os.path.join(os.getcwd(), "tests/results_meas_dist_parallel")
+
     measure_dist_parallel(
-        covs_dir=cov_input_dir,
-        output_dir=os.path.join(
-            home_path, "Documents/BayesCompare/tests/results_meas_dist_parallel/"
-        ),
+        covs_dir=cov_input_file,
+        output_dir=output_dir,
         meas_name=meas_name,
         samples_jsd_tvd=NUM_SAMPLES,
         generator=np.random.Generator(np.random.SFC64(124)),
     )
 
     hdf_filename = os.path.join(
-        home_path,
-        "Documents/BayesCompare/tests/results_meas_dist_parallel/"
-        + "dist_test_input_meas_dist_parallel_"
-        + simplify_string(meas_name)
-        + ".hdf5",
+        output_dir,
+        f"dist_test_input_meas_dist_parallel_{simplify_string(meas_name)}.hdf5",
     )
 
     with h5py.File(hdf_filename, "r") as f:
 
         parallel_output = f["dist"][...]
 
-    with open(cov_input_dir, "rb") as f:
+    with open(cov_input_file, "rb") as f:
 
         covs_names = pickle.load(f)
 
