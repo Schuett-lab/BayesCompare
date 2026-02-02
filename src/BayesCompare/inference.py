@@ -233,7 +233,7 @@ def loglik_score(
     return loglik_score
 
 
-def posterior(loglik_array: NDArray) -> NDArray:
+def posterior(loglik_array: NDArray, model_dim=1) -> NDArray:
     """
     Obtain the posterior probabilities that a given model produces the activations
     observed from a certain measure (voxel or model)
@@ -241,20 +241,22 @@ def posterior(loglik_array: NDArray) -> NDArray:
     Parameters
     ----------
 
-    loglik_array: NDArray, shape (n_channels, n_models)
-        Each row represents a measurement channel from a and every row represents
-        one of the candidate models. Each element is the log-likelihood of each
-        candidate model producing the observed activation in the corresponding
-        measurement channel
+    loglik_array: NDArray, shape (n_models, n_channels) or (n_noise, n_models, n_channels)
+        Each row represents one of the candidate models while each column represents a
+        measurement channel present in the data. Each element is the log-likelihood of
+        each candidate model producing the observed activation in the corresponding
+        measurement channel. In the 3-D case, the first dimension corresponds to
+        different noise variance values.
 
     Returns
     -------
 
-    post_array: NDArray, shape (n_channels, n_models)
+    post_array: NDArray
         Each element represents the posterior probability of each of the candidate
-        models producing the observed activation in each channel
+        models producing the observed activation in each channel. Preserves input
+        shape
     """
 
-    post_array = loglik_array - logsumexp(loglik_array, axis=1, keepdims=True)
+    post_array = loglik_array - logsumexp(loglik_array, axis=model_dim, keepdims=True)
 
     return post_array
