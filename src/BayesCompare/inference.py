@@ -168,7 +168,7 @@ def loglik_score(
     Parameters
     ----------
 
-    norm_covs: list[np.array], len (n_models,)[shape (n_stim, n_stim)]
+    norm_cov: list[np.array], shape (n_stim, n_stim)
         List containing the covariance matrices corresponding to the different
         models. The covariance matrices must be normalized so they trace is
         equal to N, with N being the number of stimuli. Each covariance matrix
@@ -190,7 +190,7 @@ def loglik_score(
     Returns
     -------
 
-    loglik_score: np.array, shape (n_channels, n_models)
+    loglik_score: np.array, shape (n_channels,)
         Log-likelihood score for each measurement channel and candidate model
 
     """
