@@ -196,21 +196,11 @@ def cov_extractor(
                     model_history.layers_with_saved_activations, layer_list
                 )
 
-                for layer in tqdm.tqdm(
-                    proper_saved_layers_list,
-                    initial=1,
-                    total=len(layer_list),
-                    desc="Requested Layer Activations",
-                ):
+                for layer in proper_saved_layers_list:
                     covs[layer] = model_history[layer].tensor_contents
 
             else:
-                for layer in tqdm.tqdm(
-                    model_history.layers_with_saved_activations,
-                    initial=1,
-                    total=len(layer_list),
-                    desc="Requested Layer Activations",
-                ):
+                for layer in model_history.layers_with_saved_activations:
                     covs[layer] = model_history[layer].tensor_contents
 
     return covs
