@@ -160,6 +160,7 @@ def loglik_score(
     activations: NDArray,
     noise_var: NDArray | float,
     signal_var: Optional[NDArray] = None,
+    img_weights: Optional[NDArray] = None,
     n_jobs: int = -1,
 ) -> NDArray:
     """
@@ -184,6 +185,13 @@ def loglik_score(
         across all stimuli
 
     signal_var: np.array, shape (n_channels,) or None, default None
+        Estimated variance attributed to signal for each measurement channel
+        across all stimuli. If not given, it is infered from noise_var
+
+    img_weights: np.array, shape (n_stim) or None, default None
+        Array containing how many presentations of each image are in the neural
+        data. This is used to weight the noise variance for each individual entry
+        of the covariance matrix
 
     n_jobs: int, default = -1
         Parameter passed to joblib for parallelization
@@ -202,20 +210,27 @@ def loglik_score(
     else:
         single_noise_value = False
 
-    def voxel_loop(norm_cov, y, sig_var, eps_var, cov_inv=None):
+    def voxel_loop(norm_cov, y, sig_var, eps_var, cov_inv=None, img_weights=None):
         """Run evidence on one voxel and all models"""
 
-        if cov_inv is not None:
+        if cov_inv is not None:  # Uses the same cov for every voxel
             ev = evidence(norm_cov, y, cov_inv=cov_inv)
-        else:
-            s_cov = cov_sigma(norm_cov, signal_var=sig_var, noise_var=eps_var)
+        else:  # Uses a different s_cov per voxel due to different noise values
+            s_cov = cov_sigma(
+                norm_cov, signal_var=sig_var, noise_var=eps_var, img_weights=img_weights
+            )
             ev = evidence(s_cov, y)
 
         return ev.flatten()
 
-    if single_noise_value:
+    if single_noise_value:  # Pre-compute cov_inv to save time
         N = len(activations[0])
-        s_cov = cov_sigma(norm_cov, signal_var=signal_var, noise_var=noise_var)
+        s_cov = cov_sigma(
+            norm_cov,
+            signal_var=signal_var,
+            noise_var=noise_var,
+            img_weights=img_weights,
+        )
         cov_inv = np.linalg.inv(s_cov[:N, :N])
         model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
             delayed(voxel_loop)(s_cov, y, signal_var, noise_var, cov_inv)
@@ -223,11 +238,11 @@ def loglik_score(
         )
     else:
         model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
-            delayed(voxel_loop)(norm_cov, y, sig_var, eps_var)
+            delayed(voxel_loop)(norm_cov, y, sig_var, eps_var, img_weights=img_weights)
             for y, sig_var, eps_var in tqdm(
                 zip(activations, signal_var, noise_var), total=activations.shape[0]
             )
-        )  # All voxels, all layers
+        )  # All voxels, one layer
 
     loglik_score = np.concatenate(model_scores)
 
