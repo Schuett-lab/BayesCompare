@@ -21,7 +21,10 @@ def trace_norm(cov: NDArray | torch.Tensor) -> NDArray | torch.Tensor:
 
 
 def cov_sigma(
-    cov: NDArray | torch.Tensor, noise_var: float, signal_var: float | None = None
+    cov: NDArray | torch.Tensor,
+    noise_var: float,
+    signal_var: float | None = None,
+    img_weights: Optional[NDArray] = None,
 ) -> NDArray | torch.Tensor:
     """
     Multiply the (normalized) covariance matrix by the estimated variance of
@@ -41,10 +44,16 @@ def cov_sigma(
         Estimate of the variance attributed to the data. If not passed, it is
         assumed to be (1 - noise_var)
 
+    img_weights: NDArray or None, shape (n_stim,), default None
+        Array with weights to reduce noise variance added to each individual image
+        of the covariance matrix. This is useful when images have been presented
+        more than once, which is the case in comparisons with neural data.
+
+
     Returns
     -------
 
-    cov_sigma: NDArray or torch.Tensor
+    cov_sigma: NDArray or torch.Tensor, shape (n_stim, n_stim)
         Modified covariance matrix that represents the variance of the
         predictive distribution of y
     """
@@ -53,7 +62,10 @@ def cov_sigma(
 
     module = check_input_format(cov)
 
-    cov_sigma = signal_var * cov + noise_var * module.eye(cov.shape[0])
+    if img_weights is not None:
+        cov_sigma = signal_var * cov + noise_var * np.diag(1 / img_weights)
+    else:
+        cov_sigma = signal_var * cov + noise_var * module.eye(cov.shape[0])
 
     return cov_sigma
 

@@ -118,7 +118,7 @@ def test_sigma_cov(inputs, weighted):
     norm_cov = cov_utils.trace_norm(inputs["utils_covs_np"][0])
     noise_var = 0.5
     if weighted:
-        weights = np.random.randint(1, 4, n=norm_cov.shape[0])
+        weights = np.random.randint(1, 4, size=norm_cov.shape[0])
         noise_weights = np.diag(1 / weights)
     else:
         weights = None
