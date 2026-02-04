@@ -16,6 +16,9 @@ from BayesCompare.cov_utils import (
 
 
 def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
+    # Check whether the folder exists
+    if not os.path.exists(hdf_dir):
+        os.makedirs(hdf_dir)
 
     print(f"Now computing {measure_name}")
     # convention for the name of the distance HDF5 files is: dist_<covs_list_filename>_<measure_name>.hdf5
