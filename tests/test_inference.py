@@ -71,11 +71,16 @@ def test_evidence_score_io():
 
 
 def test_posterior():
-    input = np.random.rand(2, 10, 50)  # (n_noise, n_models, n_voxels)
-    expected = input - logsumexp(input, axis=1, keepdims=True)
+    input = np.random.rand(50, 10, 2)  # (n_voxels, n_models, n_noise)
 
-    post_2d = posterior(input[0], model_dim=0)  # input is (n_models, n_voxels)
-    post_3d = posterior(input, model_dim=1)
+    logpost_2d = posterior(input[..., 0])  # input is (n_voxels, n_models)
+    logpost_3d = posterior(input)
 
-    assert_equal(post_2d, expected[0])
-    assert_equal(post_3d, expected)
+    for post_array in [logpost_2d, logpost_3d]:
+        # Check that the sum over the posterior is equal to the number of voxels
+        # (posterior over models and noise values makes all values for one voxel
+        # add up to 1)
+        result = np.sum(np.exp(post_array))
+        expected = post_array.shape[0]
+
+        assert_almost_equal(result, expected)

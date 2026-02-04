@@ -3,6 +3,7 @@ import numpy as np
 from joblib import Parallel, delayed
 from scipy.linalg import pinv
 from scipy.special import logsumexp
+from typing import Tuple, Optional
 from tqdm import tqdm
 
 from numpy.typing import NDArray
@@ -233,7 +234,9 @@ def loglik_score(
     return loglik_score
 
 
-def posterior(loglik_array: NDArray, model_dim=1) -> NDArray:
+def posterior(
+    loglik_array: NDArray, target_dims: Optional[Tuple] | Optional[int] = None
+) -> NDArray:
     """
     Obtain the posterior probabilities that a given model produces the activations
     observed from a certain measure (voxel or model)
@@ -241,12 +244,16 @@ def posterior(loglik_array: NDArray, model_dim=1) -> NDArray:
     Parameters
     ----------
 
-    loglik_array: NDArray, shape (n_models, n_channels) or (n_noise, n_models, n_channels)
-        Each row represents one of the candidate models while each column represents a
-        measurement channel present in the data. Each element is the log-likelihood of
-        each candidate model producing the observed activation in the corresponding
-        measurement channel. In the 3-D case, the first dimension corresponds to
-        different noise variance values.
+    loglik_array: NDArray, shape (n_channels, ...)
+        The first dimension represents the measurement channels, with the remaining
+        dimensions representing the candidate models and optionally the different
+        noise values used (in the 3D case)
+
+    target_dims: Tuple, int or None, default None
+        Dimensions over which to compute the posterior. If None, it defaults to
+        all dimensions except the first (n_channels). The posterior is intended
+        to be computed over models and noise values. Use this parameter if you
+        have extra dimensions representing other variables (e.g. subjects)
 
     Returns
     -------
@@ -256,7 +263,8 @@ def posterior(loglik_array: NDArray, model_dim=1) -> NDArray:
         models producing the observed activation in each channel. Preserves input
         shape
     """
-
-    post_array = loglik_array - logsumexp(loglik_array, axis=model_dim, keepdims=True)
+    if not target_dims:
+        target_dims = tuple(range(1, loglik_array.ndim))
+    post_array = loglik_array - logsumexp(loglik_array, axis=target_dims, keepdims=True)
 
     return post_array
