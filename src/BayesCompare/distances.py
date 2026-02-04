@@ -24,7 +24,8 @@ from .cov_utils import (
     check_cov_symmetry,
     check_and_change_input_format,
     check_input_format,
-    check_cov_normalized,
+    trace_norm_N,
+    cov_sigma_N,
 )
 
 
@@ -489,10 +490,11 @@ def measure_dist(
     mean: Optional[Union[Sequence[int], np.ndarray, torch.Tensor]] = None,
     meas_name: str = "TVD",
     noise_var: Optional[float] = None,
-    b: float = 1 / 100,
+    b: float = 0,
+    normalize: bool = True,
     samples_jsd_tvd: int = 10000,
-    show_progress: Optional[bool] = True,
     generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
+    show_progress: Optional[bool] = True,
 ):
     """
     Compute a symmetric pairwise distance matrix from the list of covariances.
@@ -516,10 +518,12 @@ def measure_dist(
         Noise variance to be applied in the normalization if the matrices are not already normalized.
         If None, noise_var is computed from the number of images (dim) used to obtain the cov matrix and
         the parameter `b` using the formula
-        noise_var = (dim * b) / (1 + (dim * b)). Default is None.
+        noise_var = (dim * b) / (1 + (dim * b)).
+        It overwrites b if both is provided. Default is None.
     b : float, optional
-        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is
-        1/100.
+        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.
+    normalize : bool, optional
+        Flag for selecting to apply trace normalization or not. Defaults to True (normalization is applied by default).
     samples_jsd_tvd : integer, optional
         Number of samples used for computing JSD and TVD measures. Defaults to 10000.
     show_progress : bool, optional
@@ -541,15 +545,30 @@ def measure_dist(
     >>> dist_matrix = measure_dist(cov_list, meas_name="TVD")
     """
 
-    if noise_var == None:
-        dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
-        noise_var = dim * b / (1 + (dim * b))
-
     idx = np.random.randint(len(covs))
-    normalized = check_cov_normalized(covs[idx])
 
-    if not normalized and meas_name in DISTANCES["ours"]:
+    # normalize and add noise
+    if normalize and (b != 0 or noise_var):
+
+        if noise_var == None:  # if noise_var was not given but b is given
+            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+            noise_var = dim * b / (1 + (dim * b))
+
         covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
+
+    # normalize but don't add noise
+    elif normalize and not (b) and not (noise_var):
+
+        covs = trace_norm_N(covs)
+
+    # don't normalize but add noise
+    elif not (normalize) and (b != 0 or noise_var):
+
+        if noise_var == None:  # if noise_var was not given but b is given
+            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+            noise_var = dim * b / (1 + (dim * b))
+
+        covs = cov_sigma_N(covs, noise_var=noise_var)
 
     covs, N, module = check_and_change_input_format(covs)
 
