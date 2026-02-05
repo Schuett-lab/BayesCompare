@@ -125,7 +125,7 @@ def measure_dist_parallel(
     mean=None,
     meas_name: Sequence[str] = ["TVD"],
     noise_var: Optional[float] = None,
-    b: float = 1 / 100,
+    b: float = 0.0,
     normalize: bool = True,
     samples_jsd_tvd: int = 10000,
     generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
