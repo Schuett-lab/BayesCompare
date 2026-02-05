@@ -490,7 +490,7 @@ def measure_dist(
     mean: Optional[Union[Sequence[int], np.ndarray, torch.Tensor]] = None,
     meas_name: str = "TVD",
     noise_var: Optional[float] = None,
-    b: float = 0,
+    b: float = 0.0,
     normalize: bool = True,
     samples_jsd_tvd: int = 10000,
     generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
