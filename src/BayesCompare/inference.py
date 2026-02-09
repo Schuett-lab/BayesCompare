@@ -278,7 +278,7 @@ def posterior(
         models producing the observed activation in each channel. Preserves input
         shape
     """
-    if not target_dims:
+    if target_dims is None:
         target_dims = tuple(range(1, loglik_array.ndim))
     post_array = loglik_array - logsumexp(loglik_array, axis=target_dims, keepdims=True)
 
