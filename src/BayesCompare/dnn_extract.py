@@ -136,6 +136,7 @@ def cov_extractor(
     layer_list: Union[List[str], str],
     inputs: Union[torch.Tensor, np.ndarray],
     random_seed: int = 42,
+    cov_postfunc: bool = True,
 ):
     """
     Extracts covariance matrices from specified layers of a DNN model given input data.
@@ -158,33 +159,50 @@ def cov_extractor(
 
     covs = {}
 
-    N = inputs.shape[0]
-
-    get_cov_n = partial(get_cov, N=N)
+    if cov_postfunc:
+        N = inputs.shape[0]
+        get_cov_n = partial(get_cov, N=N)
 
     model.eval()
 
     with torch.inference_mode():
 
-        print("Covariance computation has started. This may take a while.")
+        if cov_postfunc:
+            print("Covariance computation has started. This may take a while.")
+        else:
+            print("Activation computation has started. This may take a while.")
 
-        model_history = tl.log_forward_pass(
-            model,
-            inputs,
-            layers_to_save=layer_list[0],
-            vis_opt="none",
-            activation_postfunc=get_cov_n,
-            detach_saved_tensors=True,
-            random_seed=random_seed,
-        )
+        if cov_postfunc:
+            model_history = tl.log_forward_pass(
+                model,
+                inputs,
+                layers_to_save=layer_list[0],
+                vis_opt="none",
+                activation_postfunc=get_cov_n,
+                detach_saved_tensors=True,
+                random_seed=random_seed,
+            )
+        else:
+            model_history = tl.log_forward_pass(
+                model,
+                inputs,
+                layers_to_save=layer_list[0],
+                vis_opt="none",
+                detach_saved_tensors=True,
+                random_seed=random_seed,
+            )
 
         covs[layer_list[0]] = model_history[layer_list[0]].tensor_contents
 
         if len(layer_list) > 1:
-
-            print(
-                "Model history object is created, now covariances for selected layers will be extracted."
-            )
+            if cov_postfunc:
+                print(
+                    "Model history object is created, now covariances for selected layers will be extracted."
+                )
+            else:
+                print(
+                    "Model history object is created, now activations for selected layers will be extracted."
+                )
 
             model_history.save_new_activations(
                 model, inputs, layers_to_save=layer_list[1:], random_seed=random_seed
