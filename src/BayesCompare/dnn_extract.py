@@ -147,9 +147,11 @@ def cov_extractor(
             for which to compute the covariance matrices.
         inputs (Union[torch.Tensor, np.array]): An input tensor or array of images to
             extract covariances from. First dimension is expected to be the number of images.
+        random_seed (Optional(int)): Random seed for deterministic activation/covariance extraction. Defaults to 42.
+        cov_postfunction (Optional(int): Flag for specifiying whether to get covariance (True) or activations (False) from the model. Defaults to True, meaning that covariances will be returned.
     Returns:
         covs (dict): A dictionary where keys are layer names and values are the corresponding
-            covariance matrices.
+            covariance/activation matrices.
     Raises:
         UserWarning: If a specified layer does not have a dimension matching the number of input images.
     """
@@ -159,50 +161,37 @@ def cov_extractor(
 
     covs = {}
 
-    if cov_postfunc:
-        N = inputs.shape[0]
-        get_cov_n = partial(get_cov, N=N)
+    N = inputs.shape[0]
+    postfunc = partial(get_cov, N=N) if cov_postfunc else None
 
     model.eval()
 
     with torch.inference_mode():
 
-        if cov_postfunc:
-            print("Covariance computation has started. This may take a while.")
-        else:
-            print("Activation computation has started. This may take a while.")
+        print(
+            ("Covariance" if cov_postfunc else "Activation")
+            + " computation has started. This may take a while."
+        )
 
-        if cov_postfunc:
-            model_history = tl.log_forward_pass(
-                model,
-                inputs,
-                layers_to_save=layer_list[0],
-                vis_opt="none",
-                activation_postfunc=get_cov_n,
-                detach_saved_tensors=True,
-                random_seed=random_seed,
-            )
-        else:
-            model_history = tl.log_forward_pass(
-                model,
-                inputs,
-                layers_to_save=layer_list[0],
-                vis_opt="none",
-                detach_saved_tensors=True,
-                random_seed=random_seed,
-            )
+        model_history = tl.log_forward_pass(
+            model,
+            inputs,
+            layers_to_save=layer_list[0],
+            vis_opt="none",
+            activation_postfunc=postfunc,
+            detach_saved_tensors=True,
+            random_seed=random_seed,
+        )
 
         covs[layer_list[0]] = model_history[layer_list[0]].tensor_contents
 
         if len(layer_list) > 1:
-            if cov_postfunc:
-                print(
-                    "Model history object is created, now covariances for selected layers will be extracted."
-                )
-            else:
-                print(
-                    "Model history object is created, now activations for selected layers will be extracted."
-                )
+
+            print(
+                "Model history object is created, now "
+                + ("covariances" if cov_postfunc else "activations")
+                + " for selected layers will be extracted."
+            )
 
             model_history.save_new_activations(
                 model, inputs, layers_to_save=layer_list[1:], random_seed=random_seed
