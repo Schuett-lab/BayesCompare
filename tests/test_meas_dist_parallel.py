@@ -33,7 +33,7 @@ NUM_SAMPLES = 10000
 
 
 @pytest.mark.parametrize("meas_name", ALL_MEASURES, ids=ALL_MEASURES)
-def test_meas_dist_parallel(meas_name):
+def test_meas_dist_parallel(tmp_path, meas_name):
 
     generator = np.random.Generator(np.random.SFC64(124))
 
@@ -42,7 +42,7 @@ def test_meas_dist_parallel(meas_name):
         "tests/sample_data/test_input_meas_dist_parallel.pkl",
     )
 
-    output_dir = os.path.join(os.getcwd(), "tests/results_meas_dist_parallel")
+    output_dir = os.path.join(tmp_path, "results_meas_dist_parallel")
 
     measure_dist_parallel(
         covs_dir=cov_input_file,
@@ -50,6 +50,7 @@ def test_meas_dist_parallel(meas_name):
         meas_name=meas_name,
         samples_jsd_tvd=NUM_SAMPLES,
         generator=np.random.Generator(np.random.SFC64(124)),
+        b=1 / 100,
     )
 
     hdf_filename = os.path.join(
@@ -73,6 +74,7 @@ def test_meas_dist_parallel(meas_name):
         samples_jsd_tvd=NUM_SAMPLES,
         show_progress=False,
         generator=np.random.Generator(np.random.SFC64(124)),
+        b=1 / 100,
     )
 
     if "jsd" in meas_name or "tvd" in meas_name:
