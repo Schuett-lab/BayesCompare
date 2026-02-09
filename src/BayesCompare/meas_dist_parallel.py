@@ -10,8 +10,9 @@ from typing import Optional, Sequence, Union
 from BayesCompare.distances import DISTANCES, simplify_string, select_measure
 from BayesCompare.cov_utils import (
     cov_trace_norm_sigma_N,
-    check_cov_normalized,
+    trace_norm_N,
     check_cov_symmetry,
+    cov_sigma_N,
 )
 
 
@@ -124,7 +125,8 @@ def measure_dist_parallel(
     mean=None,
     meas_name: Sequence[str] = ["TVD"],
     noise_var: Optional[float] = None,
-    b: float = 1 / 100,
+    b: float = 0.0,
+    normalize: bool = True,
     samples_jsd_tvd: int = 10000,
     generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
     num_workers: int = mp.cpu_count() - 1,
@@ -153,18 +155,24 @@ def measure_dist_parallel(
         Name of the distance measure to compute (e.g. "TVD") or a list/tuple of measure
         names. Each name is resolved to a callable via `dist.select_measure`. Default is
         "TVD".
-    num_workers : int, optional
-        Number of worker processes for parallel computation. By default this is set to
-        (number of CPUs - 1). Must be >= 1. The function uses joblib.Parallel with the
-        "loky" backend to dispatch work.
     noise_var : float, optional
         Noise variance to be applied in the normalization if the matrices are not already normalized.
         If None, noise_var is computed from the number of images (dim) used to obtain the cov matrix and
         the parameter `b` using the formula
-        noise_var = (dim * b) / (1 + (dim * b)). Default is None.
-    b: float, optional
-        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is
-        1/100.
+        noise_var = (dim * b) / (1 + (dim * b)).
+        It overwrites b if both is provided. Default is None.
+    b : float, optional
+        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.
+    normalize : bool, optional
+        Flag for selecting to apply trace normalization or not. Defaults to True (normalization is applied by default).
+    samples_jsd_tvd : integer, optional
+        Number of samples used for computing JSD and TVD measures. Defaults to 10000.
+    generator: np.random.Generator or torch.Generator, optional
+        A Generator object for the randomization for generating samples for JSD and TVD computations. Default is None.
+    num_workers : int, optional
+        Number of worker processes for parallel computation. By default this is set to
+        (number of CPUs - 1). Must be >= 1. The function uses joblib.Parallel with the
+        "loky" backend to dispatch work.
 
     Returns
     -------
@@ -201,10 +209,29 @@ def measure_dist_parallel(
         noise_var = dim * b / (1 + (dim * b))
 
     idx = np.random.randint(len(covs))
-    normalized = check_cov_normalized(covs[idx])
 
-    if not normalized and meas_name in DISTANCES["ours"]:
+    # normalize and add noise
+    if normalize and (b != 0 or noise_var):
+
+        if noise_var == None:  # if noise_var was not given but b is given
+            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+            noise_var = dim * b / (1 + (dim * b))
+
         covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
+
+    # normalize but don't add noise
+    elif normalize and not (b) and not (noise_var):
+
+        covs = trace_norm_N(covs)
+
+    # don't normalize but add noise
+    elif not (normalize) and (b != 0 or noise_var):
+
+        if noise_var == None:  # if noise_var was not given but b is given
+            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+            noise_var = dim * b / (1 + (dim * b))
+
+        covs = cov_sigma_N(covs, noise_var=noise_var)
 
     symmetric = check_cov_symmetry(covs[idx])
     if not symmetric:
