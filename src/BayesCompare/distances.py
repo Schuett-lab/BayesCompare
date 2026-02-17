@@ -2,7 +2,6 @@ import numpy as np
 import scipy.linalg
 from scipy.linalg.blas import dtrmm as mm
 import tqdm
-import re
 import torch
 from scipy.linalg import cho_factor, cho_solve
 from typing import Sequence, Union, Optional
@@ -18,6 +17,8 @@ from .others import (
     _rsa_cos_torch,
     _rsa_acos_np,
     _rsa_acos_torch,
+    _kernel_gulp_np,
+    _kernel_gulp_torch,
 )
 from .cov_utils import (
     cov_trace_norm_sigma_N,
@@ -27,7 +28,7 @@ from .cov_utils import (
     trace_norm_N,
     cov_sigma_N,
 )
-
+from .dist_utils import simplify_string, check_small_negative
 
 ### Metrics
 
@@ -493,6 +494,7 @@ def measure_dist(
     b: float = 0.0,
     normalize: bool = True,
     samples_jsd_tvd: int = 10000,
+    lmbd: Optional[float] = None,
     generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
     show_progress: Optional[bool] = True,
 ):
@@ -593,7 +595,8 @@ def measure_dist(
                     dist[i, j] = measure(
                         ci, cj, num_samples=samples_jsd_tvd, gen=generator
                     )  # not using mean, for a generalized code mean should be provided
-
+                elif "gulp" in meas_name:
+                    dist[i, j] = measure(ci, cj, lmbd=lmbd)
                 else:
                     dist[i, j] = measure(
                         ci, cj
@@ -606,14 +609,6 @@ def measure_dist(
 
 
 ## Helper functions
-
-
-def simplify_string(s: str) -> str:
-    """
-    - convert to lowercase
-    - remove underscores, dashes, and spaces
-    """
-    return re.sub(r"[ _-]+", "", s.lower())
 
 
 def select_measure(cov_mtx, meas_name, module=None):
@@ -683,35 +678,6 @@ def select_measure(cov_mtx, meas_name, module=None):
     return measure
 
 
-def check_small_negative(d):
-
-    epsilon = 1e-7
-
-    # Python / NumPy scalar
-    if isinstance(d, (int, float, np.floating)):
-        return 0.0 if (-epsilon < d < 0) else d
-
-    # NumPy array
-    if isinstance(d, np.ndarray):
-        if -epsilon < d[0] < 0:
-            d[0] = 0
-        return d
-
-    # Torch tensor
-    if isinstance(d, torch.Tensor):
-
-        if d.ndim == 0:
-            if -epsilon < d < 0:
-                d[()] = 0
-        else:
-            if -epsilon < d[0] < 0:
-                d[0] = 0
-
-        return d
-
-    return d
-
-
 DISTANCES = {
     "ours": [
         "wasserstein",
@@ -727,7 +693,15 @@ DISTANCES = {
         "bhattacharyya",
         "mahalanobis",
     ],
-    "others": ["cka", "rsa_arccos", "rsa_cos", "rsa_corr", "rsa_rank"],
+    "others": [
+        "cka",
+        "rsa_arccos",
+        "rsa_cos",
+        "rsa_corr",
+        "rsa_rank",
+        "gulp",
+        "kernelgulp",
+    ],
 }
 
 REGISTRY = {
@@ -749,6 +723,8 @@ REGISTRY = {
         "rsacos": _rsa_cos_np,
         "rsacorr": _rsa_corr_np,
         "rsarank": _rsa_rank_spearman_np,
+        "gulp": _kernel_gulp_np,
+        "kernelgulp": _kernel_gulp_np,
     },
     "torch": {
         "wasserstein": _wasserstein_torch,
@@ -768,5 +744,7 @@ REGISTRY = {
         "rsacos": _rsa_cos_torch,
         "rsacorr": _rsa_corr_torch,
         "rsarank": _rsa_rank_spearman_torch,
+        "gulp": _kernel_gulp_torch,
+        "kernelgulp": _kernel_gulp_torch,
     },
 }
