@@ -7,7 +7,8 @@ import pickle
 import tqdm
 import torch
 from typing import Optional, Sequence, Union
-from BayesCompare.distances import DISTANCES, simplify_string, select_measure
+from BayesCompare.distances import select_measure
+from BayesCompare.dist_utils import simplify_string
 from BayesCompare.cov_utils import (
     cov_trace_norm_sigma_N,
     trace_norm_N,
