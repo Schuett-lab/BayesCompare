@@ -3,6 +3,8 @@
 import numpy as np
 import torch
 import scipy.stats as stats
+from BayesCompare.cov_utils import cov_sigma, trace_norm
+from BayesCompare.dist_utils import check_small_negative
 
 
 def _cka_np(K1, K2):
@@ -146,6 +148,36 @@ def _rsa_acos_torch(K1, K2):
         / torch.sqrt(torch.sum(d1[idx] * d1[idx]))
         / torch.sqrt(torch.sum(d2[idx] * d2[idx]))
     )
+
+
+def _kernel_gulp_np(K1, K2, lmbd):
+    k1_normed = trace_norm(K1)
+    k2_normed = trace_norm(K2)
+    k1_lmbd_inv = np.linalg.inv(cov_sigma(k1_normed, noise_var=lmbd, signal_var=1))
+    k2_lmbd_inv = np.linalg.inv(cov_sigma(k2_normed, noise_var=lmbd, signal_var=1))
+    k1_term = k1_lmbd_inv @ k1_normed @ k1_lmbd_inv @ k1_normed
+    k2_term = k2_lmbd_inv @ k2_normed @ k2_lmbd_inv @ k2_normed
+    k12_term = k1_lmbd_inv @ k1_normed @ k2_lmbd_inv @ k2_normed
+    d_sq = np.trace(k1_term) + np.trace(k2_term) - 2 * np.trace(k12_term)
+
+    d_sq = check_small_negative(d_sq)
+
+    return d_sq**0.5
+
+
+def _kernel_gulp_torch(K1, K2, lmbd):
+    k1_normed = trace_norm(K1)
+    k2_normed = trace_norm(K2)
+    k1_lmbd_inv = torch.linalg.inv(cov_sigma(k1_normed, noise_var=lmbd, signal_var=1))
+    k2_lmbd_inv = torch.linalg.inv(cov_sigma(k2_normed, noise_var=lmbd, signal_var=1))
+    k1_term = k1_lmbd_inv @ k1_normed @ k1_lmbd_inv @ k1_normed
+    k2_term = k2_lmbd_inv @ k2_normed @ k2_lmbd_inv @ k2_normed
+    k12_term = k1_lmbd_inv @ k1_normed @ k2_lmbd_inv @ k2_normed
+    d_sq = torch.trace(k1_term) + torch.trace(k2_term) - 2 * torch.trace(k12_term)
+
+    d_sq = check_small_negative(d_sq)
+
+    return d_sq**0.5
 
 
 def _rsa_euclidean_dist_np(M):
