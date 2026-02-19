@@ -23,6 +23,8 @@ ALL_MEASURES = [
     "rsa_corr",
     "rsa_rank",
     "gulp",
+    "dist_corr",
+    "jaccard",
 ]
 
 home_path = Path.home()
@@ -52,6 +54,15 @@ def test_meas_dist_parallel(tmp_path, meas_name):
             meas_name=meas_name,
             normalize=False,
             lmbd=0.01,
+        )
+
+    elif meas_name == "jaccard":
+        measure_dist_parallel(
+            covs_dir=cov_input_file,
+            output_dir=output_dir,
+            meas_name=meas_name,
+            normalize=False,
+            k=3,
         )
 
     else:
@@ -86,6 +97,14 @@ def test_meas_dist_parallel(tmp_path, meas_name):
             show_progress=False,
             normalize=False,
             lmbd=0.01,
+        )
+    elif meas_name == "jaccard":
+        non_parallel_output = measure_dist(
+            covs=covs,
+            meas_name=meas_name,
+            show_progress=False,
+            normalize=False,
+            k=3,
         )
     else:
         non_parallel_output = measure_dist(
