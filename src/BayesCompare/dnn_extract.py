@@ -79,8 +79,7 @@ def get_cov(activations: Union[torch.Tensor, np.ndarray], N=None):
         activations = check_act_dims(activations, N, module_name)
 
     act = module.reshape(activations, [activations.shape[0], -1])
-    x = act - module.mean(act, 1, keepdims=True)
-    return module.matmul(x, x.T)
+    return module.matmul(act, act.T)
 
 
 def _compare_wanted_output(output_layers: List[str], wanted_layers: List[str]):

@@ -2,7 +2,7 @@ import numpy as np
 from pathlib import Path
 import os
 from BayesCompare import measure_dist_parallel
-from BayesCompare import distances
+from BayesCompare.distances import measure_dist
 from BayesCompare.distances import simplify_string
 from numpy.testing import assert_allclose
 import pytest
@@ -22,6 +22,7 @@ ALL_MEASURES = [
     "rsa_cos",
     "rsa_corr",
     "rsa_rank",
+    "gulp",
 ]
 
 home_path = Path.home()
@@ -44,14 +45,24 @@ def test_meas_dist_parallel(tmp_path, meas_name):
 
     output_dir = os.path.join(tmp_path, "results_meas_dist_parallel")
 
-    measure_dist_parallel(
-        covs_dir=cov_input_file,
-        output_dir=output_dir,
-        meas_name=meas_name,
-        samples_jsd_tvd=NUM_SAMPLES,
-        generator=np.random.Generator(np.random.SFC64(124)),
-        b=1 / 100,
-    )
+    if meas_name == "gulp":
+        measure_dist_parallel(
+            covs_dir=cov_input_file,
+            output_dir=output_dir,
+            meas_name=meas_name,
+            normalize=False,
+            lmbd=0.01,
+        )
+
+    else:
+        measure_dist_parallel(
+            covs_dir=cov_input_file,
+            output_dir=output_dir,
+            meas_name=meas_name,
+            samples_jsd_tvd=NUM_SAMPLES,
+            generator=generator,
+            b=1 / 100,
+        )
 
     hdf_filename = os.path.join(
         output_dir,
@@ -68,14 +79,23 @@ def test_meas_dist_parallel(tmp_path, meas_name):
 
         covs = covs_names
 
-    non_parallel_output = distances.measure_dist(
-        covs=covs,
-        meas_name=meas_name,
-        samples_jsd_tvd=NUM_SAMPLES,
-        show_progress=False,
-        generator=np.random.Generator(np.random.SFC64(124)),
-        b=1 / 100,
-    )
+    if meas_name == "gulp":
+        non_parallel_output = measure_dist(
+            covs=covs,
+            meas_name=meas_name,
+            show_progress=False,
+            normalize=False,
+            lmbd=0.01,
+        )
+    else:
+        non_parallel_output = measure_dist(
+            covs=covs,
+            meas_name=meas_name,
+            samples_jsd_tvd=NUM_SAMPLES,
+            show_progress=False,
+            generator=generator,
+            b=1 / 100,
+        )
 
     if "jsd" in meas_name or "tvd" in meas_name:
         assert_allclose(parallel_output, non_parallel_output, rtol=0.01, atol=3.8)

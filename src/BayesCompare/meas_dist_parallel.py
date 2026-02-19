@@ -7,7 +7,8 @@ import pickle
 import tqdm
 import torch
 from typing import Optional, Sequence, Union
-from BayesCompare.distances import DISTANCES, simplify_string, select_measure
+from BayesCompare.distances import select_measure
+from BayesCompare.dist_utils import simplify_string
 from BayesCompare.cov_utils import (
     cov_trace_norm_sigma_N,
     trace_norm_N,
@@ -128,6 +129,7 @@ def measure_dist_parallel(
     b: float = 0.0,
     normalize: bool = True,
     samples_jsd_tvd: int = 10000,
+    lmbd: Optional[float] = None,
     generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
     num_workers: int = mp.cpu_count() - 1,
 ):
@@ -264,6 +266,12 @@ def measure_dist_parallel(
                     if "tvd" in name or "jsd" in name:
                         val = measure(
                             covs[i], covs[j], num_samples=samples_jsd_tvd, gen=generator
+                        )
+                    elif "gulp" in name:
+                        val = measure(
+                            covs[i],
+                            covs[j],
+                            lmbd=lmbd,
                         )
                     else:
                         val = measure(covs[i], covs[j])
