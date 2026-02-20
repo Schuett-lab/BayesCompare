@@ -136,7 +136,26 @@ def test_large_scale_inputs(inputs, meas_name):
 
     assert_allclose(output_np, output_th.numpy(), rtol=4e-2, atol=4e-2)
     if meas_name == "rsa_corr" or meas_name == "rsa_rank":
-        pass
+        assert np.all(
+            abs(output_np) <= 1
+        ), "RSA result NPArray cannot contain values greater than 1."
+        assert torch.all(
+            abs(output_th) <= 1
+        ), "RSA result Torch Tensor cannot contain values greater than 1."
+    elif meas_name == "rsa_cos":
+        assert np.all(output_np <= 1) and np.all(
+            output_np >= 0
+        ), "RSA result NPArray cannot contain values greater than 1 or smaller than 0."
+        assert torch.all(output_th <= 1) and torch.all(
+            output_th >= 0
+        ), "RSA result Torch Tensor cannot contain values greater than 1 or smaller than 0."
+    elif meas_name == "rsa_arccos":
+        assert np.all(output_np <= np.pi / 2) and np.all(
+            output_np >= 0
+        ), "RSA result NPArray cannot contain values greater than pi/2 or smaller than 0."
+        assert torch.all(output_th <= torch.pi / 2) and torch.all(
+            output_th >= 0
+        ), "RSA result Torch Tensor cannot contain values greater than pi/2 or smaller than 0."
     else:
         assert np.all(output_np >= 0), "NPArray contains negative values"
         assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
@@ -210,7 +229,26 @@ def test_small_scale_inputs(inputs, meas_name):
 
     assert_allclose(output_np, output_th.numpy(), rtol=4e-2, atol=4e-2)
     if meas_name == "rsa_corr" or meas_name == "rsa_rank":
-        pass
+        assert np.all(
+            abs(output_np) <= 1
+        ), "RSA result NPArray cannot contain values greater than 1."
+        assert torch.all(
+            abs(output_th) <= 1
+        ), "RSA result Torch Tensor cannot contain values greater than 1."
+    elif meas_name == "rsa_cos":
+        assert np.all(output_np <= 1) and np.all(
+            output_np >= 0
+        ), "RSA result NPArray cannot contain values greater than 1 or smaller than 0."
+        assert torch.all(output_th <= 1) and torch.all(
+            output_th >= 0
+        ), "RSA result Torch Tensor cannot contain values greater than 1 or smaller than 0."
+    elif meas_name == "rsa_arccos":
+        assert np.all(output_np <= np.pi / 2) and np.all(
+            output_np >= 0
+        ), "RSA result NPArray cannot contain values greater than pi/2 or smaller than 0."
+        assert torch.all(output_th <= torch.pi / 2) and torch.all(
+            output_th >= 0
+        ), "RSA result Torch Tensor cannot contain values greater than pi/2 or smaller than 0."
     else:
         assert np.all(output_np >= 0), "NPArray contains negative values"
         assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
@@ -285,7 +323,26 @@ def test_large_and_small_scale_inputs(inputs, meas_name):
 
     assert_allclose(output_np, output_th.numpy(), rtol=4e-2, atol=4e-2)
     if meas_name == "rsa_corr" or meas_name == "rsa_rank":
-        pass
+        assert np.all(
+            abs(output_np) <= 1
+        ), "RSA result NPArray cannot contain values greater than 1."
+        assert torch.all(
+            abs(output_th) <= 1
+        ), "RSA result Torch Tensor cannot contain values greater than 1."
+    elif meas_name == "rsa_cos":
+        assert np.all(output_np <= 1) and np.all(
+            output_np >= 0
+        ), "RSA result NPArray cannot contain values greater than 1 or smaller than 0."
+        assert torch.all(output_th <= 1) and torch.all(
+            output_th >= 0
+        ), "RSA result Torch Tensor cannot contain values greater than 1 or smaller than 0."
+    elif meas_name == "rsa_arccos":
+        assert np.all(output_np <= np.pi / 2) and np.all(
+            output_np >= 0
+        ), "RSA result NPArray cannot contain values greater than pi/2 or smaller than 0."
+        assert torch.all(output_th <= torch.pi / 2) and torch.all(
+            output_th >= 0
+        ), "RSA result Torch Tensor cannot contain values greater than pi/2 or smaller than 0."
     else:
         assert np.all(output_np >= 0), "NPArray contains negative values"
         assert torch.all(output_th >= 0), "Torch Tensor contains negative values"

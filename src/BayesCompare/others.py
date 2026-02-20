@@ -48,11 +48,12 @@ def _rsa_corr_np(K1, K2):
     idx = np.triu_indices(d1.shape[0], 1)
     d1[idx] -= np.mean(d1[idx])
     d2[idx] -= np.mean(d2[idx])
-    return (
+    corr_res = (
         np.sum(d1[idx] * d2[idx])
         / np.sqrt(np.sum(d1[idx] * d1[idx]))
         / np.sqrt(np.sum(d2[idx] * d2[idx]))
     )
+    return check_slight_greater_than_one(corr_res)
 
 
 def _rsa_corr_torch(K1, K2):
@@ -65,11 +66,12 @@ def _rsa_corr_torch(K1, K2):
     triu_d1 = triu_d1 - triu_d1.mean()
     triu_d2 = d2[idx[0], idx[1]]
     triu_d2 = triu_d2 - triu_d2.mean()
-    return (
+    corr_res = (
         torch.sum(triu_d1 * triu_d2)
         / torch.sqrt(torch.sum(triu_d1 * triu_d1))
         / torch.sqrt(torch.sum(triu_d2 * triu_d2))
     )
+    return check_slight_greater_than_one(corr_res)
 
 
 def _rsa_rank_spearman_np(K1, K2):
