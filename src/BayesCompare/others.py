@@ -9,13 +9,8 @@ from BayesCompare.dist_utils import check_small_negative, check_slight_greater_t
 
 def _cka_np(K1, K2):
     """centred kernel alignment"""
-    # centering
-    K1_centered = (
-        K1 - K1.mean(axis=1, keepdims=True) - K1.mean(axis=0, keepdims=True) + K1.mean()
-    )
-    K2_centered = (
-        K2 - K2.mean(axis=1, keepdims=True) - K2.mean(axis=0, keepdims=True) + K2.mean()
-    )
+    K1_centered = double_centering_np(K1)
+    K2_centered = double_centering_np(K2)
 
     return (
         np.sum(K1_centered * K2_centered)
@@ -26,13 +21,9 @@ def _cka_np(K1, K2):
 
 def _cka_torch(K1, K2):
     """centred kernel alignment"""
-    # centering
-    K1_centered = (
-        K1 - K1.mean(dim=1, keepdim=True) - K1.mean(dim=0, keepdim=True) + K1.mean()
-    )
-    K2_centered = (
-        K2 - K2.mean(dim=1, keepdim=True) - K2.mean(dim=0, keepdim=True) + K2.mean()
-    )
+    K1_centered = double_centering_torch(K1)
+    K2_centered = double_centering_torch(K2)
+
     return (
         torch.sum(K1_centered * K2_centered)
         / torch.sqrt(torch.sum(K1_centered * K1_centered))
@@ -41,7 +32,7 @@ def _cka_torch(K1, K2):
 
 
 def _rsa_corr_np(K1, K2):
-    """euclidean distances, correlation similarity"""
+    """RSA with euclidean distances, correlation similarity"""
     # conversion to distances
     d1 = _cov_to_euc_dist_np(K1)
     d2 = _cov_to_euc_dist_np(K2)
@@ -57,7 +48,7 @@ def _rsa_corr_np(K1, K2):
 
 
 def _rsa_corr_torch(K1, K2):
-    """euclidean distances, correlation similarity"""
+    """RSA with euclidean distances, correlation similarity"""
     # conversion to distances
     d1 = _cov_to_euc_dist_torch(K1)
     d2 = _cov_to_euc_dist_torch(K2)
@@ -75,7 +66,7 @@ def _rsa_corr_torch(K1, K2):
 
 
 def _rsa_rank_spearman_np(K1, K2):
-    """euclidean distances, Spearman's rank correlation similarity"""
+    """RSA with euclidean distances, Spearman's rank correlation similarity"""
     d1 = _cov_to_euc_dist_np(K1)
     d2 = _cov_to_euc_dist_np(K2)
     idx = np.triu_indices(d1.shape[0], 1)
@@ -89,7 +80,7 @@ def _rsa_rank_spearman_np(K1, K2):
 
 
 def _rsa_rank_spearman_torch(K1, K2):
-    """euclidean distances, Spearman's rank correlation similarity"""
+    """RSA with euclidean distances, Spearman's rank correlation similarity"""
     d1 = _cov_to_euc_dist_torch(K1)
     d2 = _cov_to_euc_dist_torch(K2)
     idx = torch.triu_indices(d1.shape[0], d1.shape[0], 1)
@@ -105,7 +96,7 @@ def _rsa_rank_spearman_torch(K1, K2):
 
 
 def _rsa_cos_np(K1, K2):
-    """euclidean distances, cosine similarity"""
+    """RSA with euclidean distances, cosine similarity"""
     # conversion to distances
     d1 = _cov_to_euc_dist_np(K1)
     d2 = _cov_to_euc_dist_np(K2)
@@ -119,7 +110,7 @@ def _rsa_cos_np(K1, K2):
 
 
 def _rsa_cos_torch(K1, K2):
-    """euclidean distances, cosine similarity"""
+    """RSA with euclidean distances, cosine similarity"""
     # conversion to distances
     d1 = _cov_to_euc_dist_torch(K1)
     d2 = _cov_to_euc_dist_torch(K2)
@@ -135,16 +126,17 @@ def _rsa_cos_torch(K1, K2):
 
 
 def _rsa_acos_np(K1, K2):
-    """euclidean distances, arc-cosine similarity"""
+    """RSA with euclidean distances, arc-cosine similarity"""
     return np.arccos(_rsa_cos_np(K1, K2))
 
 
 def _rsa_acos_torch(K1, K2):
-    """euclidean distances, arc-cosine similarity"""
+    """RSA with euclidean distances, arc-cosine similarity"""
     return torch.arccos(_rsa_cos_torch(K1, K2))
 
 
 def _kernel_gulp_np(K1, K2, lmbd):
+    """Kernel-based GULP"""
     k1_normed = trace_norm(K1)
     k2_normed = trace_norm(K2)
     k1_lmbd_inv = np.linalg.inv(cov_sigma(k1_normed, noise_var=lmbd, signal_var=1))
@@ -160,6 +152,7 @@ def _kernel_gulp_np(K1, K2, lmbd):
 
 
 def _kernel_gulp_torch(K1, K2, lmbd):
+    """Kernel-based GULP"""
     k1_normed = trace_norm(K1)
     k2_normed = trace_norm(K2)
     k1_lmbd_inv = torch.linalg.inv(cov_sigma(k1_normed, noise_var=lmbd, signal_var=1))
@@ -175,12 +168,9 @@ def _kernel_gulp_torch(K1, K2, lmbd):
 
 
 def _dist_corr_np(K1, K2):
-    K1_centered = (
-        K1 - K1.mean(axis=1, keepdims=True) - K1.mean(axis=0, keepdims=True) + K1.mean()
-    )
-    K2_centered = (
-        K2 - K2.mean(axis=1, keepdims=True) - K2.mean(axis=0, keepdims=True) + K2.mean()
-    )
+    """Distance Correlation"""
+    K1_centered = double_centering_np(K1)
+    K2_centered = double_centering_np(K2)
 
     return np.sqrt(
         _dCov2(K1_centered, K2_centered)
@@ -189,12 +179,9 @@ def _dist_corr_np(K1, K2):
 
 
 def _dist_corr_torch(K1, K2):
-    K1_centered = (
-        K1 - K1.mean(axis=1, keepdims=True) - K1.mean(axis=0, keepdims=True) + K1.mean()
-    )
-    K2_centered = (
-        K2 - K2.mean(axis=1, keepdims=True) - K2.mean(axis=0, keepdims=True) + K2.mean()
-    )
+    """Distance Correlation"""
+    K1_centered = double_centering_torch(K1)
+    K2_centered = double_centering_torch(K2)
 
     return torch.sqrt(
         _dCov2(K1_centered, K2_centered)
@@ -205,11 +192,12 @@ def _dist_corr_torch(K1, K2):
 
 
 def _jaccard_np(K1, K2, k):
-    d1 = _cov_to_euc_dist_np(K1)
-    d2 = _cov_to_euc_dist_np(K2)
+    """Jaccard Similarity"""
+    d1 = _cov_to_cos_sim_np(K1)
+    d2 = _cov_to_cos_sim_np(K2)
 
-    n1 = _knn_indices_from_euc_dist_np(d1, k)
-    n2 = _knn_indices_from_euc_dist_np(d2, k)
+    n1 = _knn_from_dist_np(d1, k, asc_or_desc="desc")
+    n2 = _knn_from_dist_np(d2, k, asc_or_desc="desc")
 
     n = K1.shape[0]
     j = np.empty(n, dtype=float)
@@ -225,11 +213,12 @@ def _jaccard_np(K1, K2, k):
 
 
 def _jaccard_torch(K1, K2, k):
-    d1 = _cov_to_euc_dist_torch(K1)
-    d2 = _cov_to_euc_dist_torch(K2)
+    """Jaccard Similarity"""
+    d1 = _cov_to_cos_sim_torch(K1)
+    d2 = _cov_to_cos_sim_torch(K2)
 
-    n1 = _knn_indices_from_euc_dist_torch(d1, k)
-    n2 = _knn_indices_from_euc_dist_torch(d2, k)
+    n1 = _knn_from_dist_torch(d1, k, asc_or_desc="desc")
+    n2 = _knn_from_dist_torch(d2, k, asc_or_desc="desc")
 
     n = K1.shape[0]
     j = torch.empty(n, dtype=float)
@@ -248,7 +237,7 @@ def _jaccard_torch(K1, K2, k):
 
 
 def _dCov2(A, B) -> float:
-    return (1 / (A.shape[0])) * (A * B).mean()
+    return (A * B).mean()
 
 
 def _cov_to_euc_dist_np(M):
@@ -271,11 +260,49 @@ def _cov_to_euc_dist_torch(M):
     return d
 
 
-def _knn_indices_from_euc_dist_np(euc_dist, k):
-    order = np.argsort(euc_dist, axis=1)
+def _cov_to_cos_sim_np(M):
+    """
+    Function for obtaining cosine similarity from covariance matrix.
+    """
+    diag = np.diag(M)
+    denom = np.sqrt(diag)[None, :] * np.sqrt(diag)[:, None]  # outer product
+    cos_sim = M / denom
+    np.fill_diagonal(cos_sim, 1.0)
+
+    return cos_sim
+
+
+def _cov_to_cos_sim_torch(M):
+    """
+    Function for obtaining cosine similarity from covariance matrix.
+    """
+    diag = torch.diagonal(M)
+    denom = torch.sqrt(diag)[None, :] * torch.sqrt(diag)[:, None]
+    cos_sim = M / denom
+    cos_sim.fill_diagonal_(1.0)
+
+    return cos_sim
+
+
+def double_centering_np(M):
+    return M - M.mean(axis=1, keepdims=True) - M.mean(axis=0, keepdims=True) + M.mean()
+
+
+def double_centering_torch(M):
+    return M - M.mean(dim=1, keepdim=True) - M.mean(dim=0, keepdim=True) + M.mean()
+
+
+def _knn_from_dist_np(dist, k, asc_or_desc):
+    if asc_or_desc == "asc":
+        order = np.argsort(dist, axis=1)
+    elif asc_or_desc == "desc":
+        order = np.argsort(-dist, axis=1)
     return order[:, 1 : k + 1]
 
 
-def _knn_indices_from_euc_dist_torch(euc_dist, k):
-    order = torch.argsort(euc_dist, axis=1)
+def _knn_from_dist_torch(dist, k, asc_or_desc):
+    if asc_or_desc == "asc":
+        order = torch.argsort(dist, dim=1, descending=False)
+    elif asc_or_desc == "desc":
+        order = torch.argsort(dist, dim=1, descending=True)
     return order[:, 1 : k + 1]
