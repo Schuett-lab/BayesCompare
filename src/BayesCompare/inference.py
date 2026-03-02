@@ -156,7 +156,7 @@ def evidence(
 
 
 def loglik_score(
-    norm_cov: list[NDArray],
+    norm_cov: NDArray,
     activations: NDArray,
     noise_var: NDArray | float,
     signal_var: Optional[NDArray] = None,
@@ -249,7 +249,7 @@ def loglik_score(
     return loglik_score
 
 
-def posterior(
+def log_posterior(
     loglik_array: NDArray, target_dims: Optional[Tuple] | Optional[int] = None
 ) -> NDArray:
     """
