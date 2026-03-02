@@ -8,9 +8,10 @@ import pickle
 import pathlib
 
 import numpy as np
-from numpy.testing import assert_almost_equal
+from numpy.testing import assert_almost_equal, assert_equal
+from scipy.special import logsumexp
 
-from BayesCompare.inference import loglik_score
+from BayesCompare.inference import loglik_score, posterior
 
 
 def read_sample_file(file_path):
@@ -67,3 +68,19 @@ def test_evidence_score_io():
 
     assert_almost_equal(score_multinoise, expected_multinoise)
     assert_almost_equal(score_singlenoise, expected_singlenoise)
+
+
+def test_posterior():
+    input = np.random.rand(50, 10, 2)  # (n_voxels, n_models, n_noise)
+
+    logpost_2d = posterior(input[..., 0])  # input is (n_voxels, n_models)
+    logpost_3d = posterior(input)
+
+    for post_array in [logpost_2d, logpost_3d]:
+        # Check that the sum over the posterior is equal to the number of voxels
+        # (posterior over models and noise values makes all values for one voxel
+        # add up to 1)
+        result = np.sum(np.exp(post_array))
+        expected = post_array.shape[0]
+
+        assert_almost_equal(result, expected)

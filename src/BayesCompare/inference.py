@@ -3,6 +3,7 @@ import numpy as np
 from joblib import Parallel, delayed
 from scipy.linalg import pinv
 from scipy.special import logsumexp
+from typing import Tuple, Optional
 from tqdm import tqdm
 
 from numpy.typing import NDArray
@@ -248,7 +249,9 @@ def loglik_score(
     return loglik_score
 
 
-def posterior(loglik_array: NDArray) -> NDArray:
+def posterior(
+    loglik_array: NDArray, target_dims: Optional[Tuple] | Optional[int] = None
+) -> NDArray:
     """
     Obtain the posterior probabilities that a given model produces the activations
     observed from a certain measure (voxel or model)
@@ -256,20 +259,27 @@ def posterior(loglik_array: NDArray) -> NDArray:
     Parameters
     ----------
 
-    loglik_array: NDArray, shape (n_channels, n_models)
-        Each row represents a measurement channel from a and every row represents
-        one of the candidate models. Each element is the log-likelihood of each
-        candidate model producing the observed activation in the corresponding
-        measurement channel
+    loglik_array: NDArray, shape (n_channels, ...)
+        The first dimension represents the measurement channels, with the remaining
+        dimensions representing the candidate models and optionally the different
+        noise values used (in the 3D case)
+
+    target_dims: Tuple, int or None, default None
+        Dimensions over which to compute the posterior. If None, it defaults to
+        all dimensions except the first (n_channels). The posterior is intended
+        to be computed over models and noise values. Use this parameter if you
+        have extra dimensions representing other variables (e.g. subjects)
 
     Returns
     -------
 
-    post_array: NDArray, shape (n_channels, n_models)
+    post_array: NDArray
         Each element represents the posterior probability of each of the candidate
-        models producing the observed activation in each channel
+        models producing the observed activation in each channel. Preserves input
+        shape
     """
-
-    post_array = loglik_array - logsumexp(loglik_array, axis=1, keepdims=True)
+    if target_dims is None:
+        target_dims = tuple(range(1, loglik_array.ndim))
+    post_array = loglik_array - logsumexp(loglik_array, axis=target_dims, keepdims=True)
 
     return post_array
