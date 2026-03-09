@@ -7,7 +7,6 @@ from typing import Tuple, Optional
 from tqdm import tqdm
 
 from numpy.typing import NDArray
-from typing import Optional
 
 from .cov_utils import cov_sigma
 
