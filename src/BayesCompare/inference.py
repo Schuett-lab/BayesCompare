@@ -105,6 +105,7 @@ def evidence(
     y: NDArray,
     mu: Optional[NDArray] = None,
     cov_inv: Optional[NDArray] = None,
+    slogdet: Optional[np.linalg._linalg.SlogdetResult] = None,
 ) -> float:
     """
     Get the log-likelihood that a given model produces the activations observed
@@ -131,6 +132,10 @@ def evidence(
         analysis make it more efficient to compute the inverse beforehand. If
         provided, it is used instead of cov
 
+    slogdet: np.linalg._linalg.SlogdetResult or None, default None
+        Signed log-determinant of the inner inverse matrix. Pre-computed using
+        np.linalg.slogdet. See the numpy documentation for more details
+
     Returns
     -------
 
@@ -139,16 +144,13 @@ def evidence(
 
     """
     N = len(y)
-    if cov_inv is not None:
-        inner_inv = cov_inv
-    else:
-        inner_inv = np.linalg.inv(cov[:N, :N])  # Precision matrix
+    inner_inv = np.linalg.inv(cov[:N, :N]) if cov_inv is None else cov_inv
+    logdet = np.linalg.slogdet(inner_inv) if slogdet is None else slogdet
     if mu is None:
         ss = np.expand_dims(y, 0) @ inner_inv @ np.expand_dims(y, 1)
     else:
         ss = np.expand_dims(y - mu, 0) @ inner_inv @ np.expand_dims(y - mu, 1)
 
-    logdet = np.linalg.slogdet(inner_inv)
     loglik = logdet.logabsdet / 2 - ss / 2 - N / 2 * np.log(2 * np.pi)
 
     return loglik
@@ -158,7 +160,7 @@ def loglik_score(
     norm_cov: NDArray,
     activations: NDArray,
     noise_var: NDArray | float,
-    signal_var: Optional[NDArray] = None,
+    signal_var: Optional[NDArray | float] = None,
     img_weights: Optional[NDArray] = None,
     n_jobs: int = -1,
 ) -> NDArray:
@@ -209,11 +211,13 @@ def loglik_score(
     else:
         single_noise_value = False
 
-    def voxel_loop(norm_cov, y, sig_var, eps_var, cov_inv=None, img_weights=None):
+    def voxel_loop(
+        norm_cov, y, sig_var, eps_var, cov_inv=None, slogdet=None, img_weights=None
+    ):
         """Run evidence on one voxel and all models"""
 
         if cov_inv is not None:  # Uses the same cov for every voxel
-            ev = evidence(norm_cov, y, cov_inv=cov_inv)
+            ev = evidence(norm_cov, y, cov_inv=cov_inv, slogdet=slogdet)
         else:  # Uses a different s_cov per voxel due to different noise values
             s_cov = cov_sigma(
                 norm_cov, signal_var=sig_var, noise_var=eps_var, img_weights=img_weights
@@ -222,7 +226,7 @@ def loglik_score(
 
         return ev.flatten()
 
-    if single_noise_value:  # Pre-compute cov_inv to save time
+    if single_noise_value:  # Pre-compute cov_inv and slogdet to save time
         N = len(activations[0])
         s_cov = cov_sigma(
             norm_cov,
@@ -231,8 +235,9 @@ def loglik_score(
             img_weights=img_weights,
         )
         cov_inv = np.linalg.inv(s_cov[:N, :N])
+        slogdet = np.linalg.slogdet(cov_inv)
         model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
-            delayed(voxel_loop)(s_cov, y, signal_var, noise_var, cov_inv)
+            delayed(voxel_loop)(s_cov, y, signal_var, noise_var, cov_inv, slogdet)
             for y in tqdm(activations, total=activations.shape[0])
         )
     else:
