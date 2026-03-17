@@ -162,7 +162,7 @@ def loglik_score(
     noise_var: NDArray | float,
     signal_var: Optional[NDArray | float] = None,
     img_weights: Optional[NDArray] = None,
-    n_jobs: int = -5,
+    n_jobs: int = -1,
 ) -> NDArray:
     """
     Estimate the log-likelihood of the mean activation of a list of measurement
