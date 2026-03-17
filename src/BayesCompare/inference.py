@@ -162,7 +162,7 @@ def loglik_score(
     noise_var: NDArray | float,
     signal_var: Optional[NDArray | float] = None,
     img_weights: Optional[NDArray] = None,
-    n_jobs: int = -1,
+    n_jobs: int = -5,
 ) -> NDArray:
     """
     Estimate the log-likelihood of the mean activation of a list of measurement
@@ -212,7 +212,7 @@ def loglik_score(
         single_noise_value = False
 
     def voxel_loop(
-        norm_cov, y, sig_var, eps_var, cov_inv=None, slogdet=None, img_weights=None
+        norm_cov, y, sig_var, eps_var
     ):
         """Run evidence on one voxel and all models"""
 
@@ -236,13 +236,16 @@ def loglik_score(
         )
         cov_inv = np.linalg.inv(s_cov[:N, :N])
         slogdet = np.linalg.slogdet(cov_inv)
+        img_weights = None
         model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
-            delayed(voxel_loop)(s_cov, y, signal_var, noise_var, cov_inv, slogdet)
+            delayed(voxel_loop)(s_cov, y, signal_var, noise_var)
             for y in tqdm(activations, total=activations.shape[0])
         )
     else:
+        cov_inv = None
+        slogdet = None
         model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
-            delayed(voxel_loop)(norm_cov, y, sig_var, eps_var, img_weights=img_weights)
+            delayed(voxel_loop)(norm_cov, y, sig_var, eps_var)
             for y, sig_var, eps_var in tqdm(
                 zip(activations, signal_var, noise_var), total=activations.shape[0]
             )
