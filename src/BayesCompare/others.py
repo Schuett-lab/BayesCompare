@@ -4,7 +4,11 @@ import numpy as np
 import torch
 import scipy.stats as stats
 from BayesCompare.cov_utils import cov_sigma, trace_norm
-from BayesCompare.dist_utils import check_small_negative, check_slight_greater_than_one
+from BayesCompare.dist_utils import (
+    check_small_negative,
+    check_slight_greater_than_one,
+    check_small_negative_eigenval,
+)
 
 
 def _cka_np(K1, K2):
@@ -231,6 +235,55 @@ def _jaccard_torch(K1, K2, k):
         j[i] = inter / union
 
     return j.mean()
+
+
+def _procrustes_np(K1, K2):
+
+    sigma1 = double_centering_np(K1)
+    sigma2 = double_centering_np(K2)
+
+    E_sig1, V_sig1 = np.linalg.eigh(sigma1)
+    E_sig1 = check_small_negative_eigenval(E_sig1)
+    sig1_sqrt = (V_sig1 * np.sqrt(E_sig1)) @ V_sig1.T
+
+    sig12 = sig1_sqrt @ sigma2 @ sig1_sqrt
+    E_sig12, V_sig12 = np.linalg.eigh(sig12)
+    E_sig12 = check_small_negative_eigenval(E_sig12)
+    sig1_sig2_sqrt = (V_sig12 * np.sqrt(E_sig12)) @ V_sig12.T
+
+    d_sq = np.trace(sigma1 + sigma2 - 2 * (sig1_sig2_sqrt))
+
+    d_sq = check_small_negative(d_sq)
+
+    return d_sq**0.5
+
+
+def _procrustes_torch(K1, K2):
+
+    if type(K1) != torch.Tensor:
+        K1 = torch.tensor(K1)
+    if type(K2) != torch.Tensor:
+        K2 = torch.tensor(K2)
+
+    K1 = K1.to(torch.float64)
+    K2 = K2.to(torch.float64)
+    sigma1 = double_centering_torch(K1)
+    sigma2 = double_centering_torch(K2)
+
+    E_sig1, V_sig1 = torch.linalg.eigh(sigma1)
+    E_sig1 = check_small_negative_eigenval(E_sig1)
+    sig1_sqrt = (V_sig1 * torch.sqrt(E_sig1)) @ V_sig1.T
+
+    sig12 = sig1_sqrt @ sigma2 @ sig1_sqrt
+    E_sig12, V_sig12 = torch.linalg.eigh(sig12)
+    E_sig12 = check_small_negative_eigenval(E_sig12)
+    sig1_sig2_sqrt = (V_sig12 * torch.sqrt(E_sig12)) @ V_sig12.T
+
+    d_sq = torch.trace(sigma1 + sigma2 - 2 * (sig1_sig2_sqrt))
+
+    d_sq = check_small_negative(d_sq)
+
+    return d_sq**0.5
 
 
 ## Helper Functions

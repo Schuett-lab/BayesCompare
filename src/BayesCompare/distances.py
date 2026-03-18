@@ -23,6 +23,8 @@ from .others import (
     _dist_corr_torch,
     _jaccard_np,
     _jaccard_torch,
+    _procrustes_np,
+    _procrustes_torch,
 )
 from .cov_utils import (
     cov_trace_norm_sigma_N,
@@ -32,7 +34,10 @@ from .cov_utils import (
     trace_norm_N,
     cov_sigma_N,
 )
-from .dist_utils import simplify_string, check_small_negative
+from .dist_utils import (
+    simplify_string,
+    check_small_negative,
+)
 
 ### Metrics
 
@@ -706,11 +711,16 @@ DISTANCES = {
         "rsa_cos",
         "rsa_corr",
         "rsa_rank",
+        "rsaarccos",
+        "rsacos",
+        "rsacorr",
+        "rsarank",
         "gulp",
         "kernelgulp",
         "distcorr",
         "distancecorrelation",
         "jaccard",
+        "procrustes",
     ],
 }
 
@@ -738,6 +748,7 @@ REGISTRY = {
         "distcorr": _dist_corr_np,
         "distancecorrelation": _dist_corr_np,
         "jaccard": _jaccard_np,
+        "procrustes": _procrustes_np,
     },
     "torch": {
         "wasserstein": _wasserstein_torch,
@@ -762,5 +773,6 @@ REGISTRY = {
         "distcorr": _dist_corr_torch,
         "distancecorrelation": _dist_corr_torch,
         "jaccard": _jaccard_torch,
+        "procrustes": _procrustes_torch,
     },
 }

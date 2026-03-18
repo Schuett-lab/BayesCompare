@@ -14,6 +14,7 @@ ALL_MEASURES = [
     "gulp",
     "dist_corr",
     "jaccard",
+    "procrustes",
 ]
 
 lmbd = 0.001
@@ -74,7 +75,7 @@ def test_large_scale_inputs(inputs, meas_name):
     output_np = []
     output_th = []
 
-    if meas_name == "gulp":
+    if meas_name == "gulp" or meas_name == "jaccard" or meas_name == "procrustes":
         output_np.append(
             measure_dist(
                 inputs["test_large_input_data"],
@@ -82,24 +83,6 @@ def test_large_scale_inputs(inputs, meas_name):
                 show_progress=False,
                 normalize=False,
                 lmbd=lmbd,
-            )
-        )
-        output_th.append(
-            measure_dist(
-                [torch.from_numpy(A) for A in inputs["test_large_input_data"]],
-                meas_name=meas_name,
-                show_progress=False,
-                normalize=False,
-                lmbd=lmbd,
-            )
-        )
-    elif meas_name == "jaccard":
-        output_np.append(
-            measure_dist(
-                inputs["test_large_input_data"],
-                meas_name=meas_name,
-                show_progress=False,
-                normalize=False,
                 k=k,
             )
         )
@@ -109,10 +92,10 @@ def test_large_scale_inputs(inputs, meas_name):
                 meas_name=meas_name,
                 show_progress=False,
                 normalize=False,
+                lmbd=lmbd,
                 k=k,
             )
         )
-
     else:
         output_np.append(
             measure_dist(
@@ -167,7 +150,7 @@ def test_small_scale_inputs(inputs, meas_name):
     output_np = []
     output_th = []
 
-    if meas_name == "gulp":
+    if meas_name == "gulp" or meas_name == "jaccard" or meas_name == "procrustes":
         output_np.append(
             measure_dist(
                 inputs["test_small_input_data"],
@@ -175,24 +158,6 @@ def test_small_scale_inputs(inputs, meas_name):
                 show_progress=False,
                 normalize=False,
                 lmbd=lmbd,
-            )
-        )
-        output_th.append(
-            measure_dist(
-                [torch.from_numpy(A) for A in inputs["test_small_input_data"]],
-                meas_name=meas_name,
-                show_progress=False,
-                normalize=False,
-                lmbd=lmbd,
-            )
-        )
-    elif meas_name == "jaccard":
-        output_np.append(
-            measure_dist(
-                inputs["test_small_input_data"],
-                meas_name=meas_name,
-                show_progress=False,
-                normalize=False,
                 k=k,
             )
         )
@@ -202,10 +167,10 @@ def test_small_scale_inputs(inputs, meas_name):
                 meas_name=meas_name,
                 show_progress=False,
                 normalize=False,
+                lmbd=lmbd,
                 k=k,
             )
         )
-
     else:
         output_np.append(
             measure_dist(
@@ -261,8 +226,7 @@ def test_large_and_small_scale_inputs(inputs, meas_name):
     output_th = []
 
     for pair in inputs["test_large_and_small_input"]:
-
-        if meas_name == "gulp":
+        if meas_name == "gulp" or meas_name == "jaccard" or meas_name == "procrustes":
             output_np.append(
                 measure_dist(
                     pair,
@@ -270,24 +234,6 @@ def test_large_and_small_scale_inputs(inputs, meas_name):
                     show_progress=False,
                     normalize=False,
                     lmbd=lmbd,
-                )
-            )
-            output_th.append(
-                measure_dist(
-                    [torch.from_numpy(pair[0]), torch.from_numpy(pair[1])],
-                    meas_name=meas_name,
-                    show_progress=False,
-                    normalize=False,
-                    lmbd=lmbd,
-                )
-            )
-        elif meas_name == "jaccard":
-            output_np.append(
-                measure_dist(
-                    pair,
-                    meas_name=meas_name,
-                    show_progress=False,
-                    normalize=False,
                     k=k,
                 )
             )
@@ -297,6 +243,7 @@ def test_large_and_small_scale_inputs(inputs, meas_name):
                     meas_name=meas_name,
                     show_progress=False,
                     normalize=False,
+                    lmbd=lmbd,
                     k=k,
                 )
             )
