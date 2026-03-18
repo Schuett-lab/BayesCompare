@@ -130,6 +130,7 @@ def measure_dist_parallel(
     normalize: bool = True,
     samples_jsd_tvd: int = 10000,
     lmbd: Optional[float] = None,
+    k: Optional[int] = None,
     generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
     num_workers: int = mp.cpu_count() - 1,
 ):
@@ -272,6 +273,12 @@ def measure_dist_parallel(
                             covs[i],
                             covs[j],
                             lmbd=lmbd,
+                        )
+                    elif "jaccard" in meas_name:
+                        val = measure(
+                            covs[i],
+                            covs[j],
+                            k=k,
                         )
                     else:
                         val = measure(covs[i], covs[j])

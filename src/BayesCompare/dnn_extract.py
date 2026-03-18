@@ -61,6 +61,7 @@ def get_cov(activations: Union[torch.Tensor, np.ndarray], N=None):
     Raises:
         NotImplementedError: If activations is neither a torch tensor nor a numpy array.
     """
+
     if torch.is_tensor(activations):
         module = torch
         module_name = "torch"
@@ -97,7 +98,9 @@ def _compare_wanted_output(output_layers: List[str], wanted_layers: List[str]):
     return [x for x in output_layers if x in wanted_set]
 
 
-def get_layer_names(model: torch.nn.Module, get_graph: Optional[str] = "none"):
+def get_layer_names(
+    model: torch.nn.Module, get_graph: Optional[str] = "none", random_seed: int = 42
+):
     """
     Retrieves the names of all layers in a DNN model, visible to TorchLens under torch.inference_mode().
 
@@ -123,6 +126,7 @@ def get_layer_names(model: torch.nn.Module, get_graph: Optional[str] = "none"):
             layers_to_save=None,
             vis_opt=get_graph,
             detach_saved_tensors=True,
+            random_seed=random_seed,
         )
 
         all_layers = list(model_history.layer_dict_main_keys.keys())
