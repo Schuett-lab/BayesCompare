@@ -41,13 +41,11 @@ def check_small_negative(d):
     return d
 
 
-def check_small_negative_eigenval(eigenvals):
+def check_small_negative_eigenval(eigenvals, rel_tolerance=1e-8, abs_tolerance=0):
     """
     Function for setting very small negative eigenvalues to 0 (since they are due to numeric errors)
     Checks only the first 5 eigenvalues (as we don't expect any more of them to be close to zero, they are already in ascending order)
     """
-    abs_tolerance = 0
-    rel_tolerance = 1e-8
 
     for idx, eigenval in enumerate(eigenvals[:5]):
         tol = rel_tolerance * eigenvals[idx + 1] + abs_tolerance
