@@ -239,8 +239,8 @@ def _jaccard_torch(K1, K2, k):
 
 def _procrustes_np(K1, K2):
 
-    sigma1 = double_centering_np(K1)
-    sigma2 = double_centering_np(K2)
+    sigma1 = double_centering_np(K1.astype(np.float64))
+    sigma2 = double_centering_np(K2.astype(np.float64))
 
     E_sig1, V_sig1 = np.linalg.eigh(sigma1)
     E_sig1 = check_small_negative_eigenval(E_sig1)
