@@ -25,6 +25,8 @@ from .others import (
     _jaccard_torch,
     _procrustes_np,
     _procrustes_torch,
+    _normalized_bures_similarity_np,
+    _normalized_bures_similarity_torch,
 )
 from .cov_utils import (
     cov_trace_norm_sigma_N,
@@ -721,6 +723,10 @@ DISTANCES = {
         "distancecorrelation",
         "jaccard",
         "procrustes",
+        "normalized_bures_similarity",
+        "normalizedburessimilarity",
+        "normburessim",
+        "nbs",
     ],
 }
 
@@ -749,6 +755,9 @@ REGISTRY = {
         "distancecorrelation": _dist_corr_np,
         "jaccard": _jaccard_np,
         "procrustes": _procrustes_np,
+        "normalizedburessimilarity": _normalized_bures_similarity_np,
+        "normburessim": _normalized_bures_similarity_np,
+        "nbs": _normalized_bures_similarity_np,
     },
     "torch": {
         "wasserstein": _wasserstein_torch,
@@ -774,5 +783,8 @@ REGISTRY = {
         "distancecorrelation": _dist_corr_torch,
         "jaccard": _jaccard_torch,
         "procrustes": _procrustes_torch,
+        "normalizedburessimilarity": _normalized_bures_similarity_torch,
+        "normburessim": _normalized_bures_similarity_torch,
+        "nbs": _normalized_bures_similarity_torch,
     },
 }
