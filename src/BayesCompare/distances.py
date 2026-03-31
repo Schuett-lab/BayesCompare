@@ -19,6 +19,12 @@ from .others import (
     _rsa_acos_torch,
     _kernel_gulp_np,
     _kernel_gulp_torch,
+    _dist_corr_np,
+    _dist_corr_torch,
+    _jaccard_np,
+    _jaccard_torch,
+    _procrustes_np,
+    _procrustes_torch,
 )
 from .cov_utils import (
     cov_trace_norm_sigma_N,
@@ -28,7 +34,10 @@ from .cov_utils import (
     trace_norm_N,
     cov_sigma_N,
 )
-from .dist_utils import simplify_string, check_small_negative
+from .dist_utils import (
+    simplify_string,
+    check_small_negative,
+)
 
 ### Metrics
 
@@ -495,6 +504,7 @@ def measure_dist(
     normalize: bool = True,
     samples_jsd_tvd: int = 10000,
     lmbd: Optional[float] = None,
+    k: Optional[int] = None,
     generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
     show_progress: Optional[bool] = True,
 ):
@@ -597,6 +607,8 @@ def measure_dist(
                     )  # not using mean, for a generalized code mean should be provided
                 elif "gulp" in meas_name:
                     dist[i, j] = measure(ci, cj, lmbd=lmbd)
+                elif "jaccard" in meas_name:
+                    dist[i, j] = measure(ci, cj, k=k)
                 else:
                     dist[i, j] = measure(
                         ci, cj
@@ -699,8 +711,16 @@ DISTANCES = {
         "rsa_cos",
         "rsa_corr",
         "rsa_rank",
+        "rsaarccos",
+        "rsacos",
+        "rsacorr",
+        "rsarank",
         "gulp",
         "kernelgulp",
+        "distcorr",
+        "distancecorrelation",
+        "jaccard",
+        "procrustes",
     ],
 }
 
@@ -725,6 +745,10 @@ REGISTRY = {
         "rsarank": _rsa_rank_spearman_np,
         "gulp": _kernel_gulp_np,
         "kernelgulp": _kernel_gulp_np,
+        "distcorr": _dist_corr_np,
+        "distancecorrelation": _dist_corr_np,
+        "jaccard": _jaccard_np,
+        "procrustes": _procrustes_np,
     },
     "torch": {
         "wasserstein": _wasserstein_torch,
@@ -746,5 +770,9 @@ REGISTRY = {
         "rsarank": _rsa_rank_spearman_torch,
         "gulp": _kernel_gulp_torch,
         "kernelgulp": _kernel_gulp_torch,
+        "distcorr": _dist_corr_torch,
+        "distancecorrelation": _dist_corr_torch,
+        "jaccard": _jaccard_torch,
+        "procrustes": _procrustes_torch,
     },
 }
