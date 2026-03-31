@@ -211,9 +211,7 @@ def loglik_score(
     else:
         single_noise_value = False
 
-    def voxel_loop(
-        norm_cov, y, sig_var, eps_var
-    ):
+    def voxel_loop(norm_cov, y, sig_var, eps_var):
         """Run evidence on one voxel and all models"""
 
         if cov_inv is not None:  # Uses the same cov for every voxel
