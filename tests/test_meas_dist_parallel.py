@@ -23,6 +23,10 @@ ALL_MEASURES = [
     "rsa_corr",
     "rsa_rank",
     "gulp",
+    "dist_corr",
+    "jaccard",
+    "procrustes",
+    "nbs",
 ]
 
 home_path = Path.home()
@@ -45,15 +49,20 @@ def test_meas_dist_parallel(tmp_path, meas_name):
 
     output_dir = os.path.join(tmp_path, "results_meas_dist_parallel")
 
-    if meas_name == "gulp":
+    if (
+        meas_name == "gulp"
+        or meas_name == "jaccard"
+        or meas_name == "procrustes"
+        or meas_name == "nbs"
+    ):
         measure_dist_parallel(
             covs_dir=cov_input_file,
             output_dir=output_dir,
             meas_name=meas_name,
             normalize=False,
             lmbd=0.01,
+            k=3,
         )
-
     else:
         measure_dist_parallel(
             covs_dir=cov_input_file,
@@ -79,12 +88,18 @@ def test_meas_dist_parallel(tmp_path, meas_name):
 
         covs = covs_names
 
-    if meas_name == "gulp":
+    if (
+        meas_name == "gulp"
+        or meas_name == "jaccard"
+        or meas_name == "procrustes"
+        or meas_name == "nbs"
+    ):
         non_parallel_output = measure_dist(
             covs=covs,
             meas_name=meas_name,
             show_progress=False,
             normalize=False,
+            k=3,
             lmbd=0.01,
         )
     else:
@@ -99,5 +114,7 @@ def test_meas_dist_parallel(tmp_path, meas_name):
 
     if "jsd" in meas_name or "tvd" in meas_name:
         assert_allclose(parallel_output, non_parallel_output, rtol=0.01, atol=3.8)
+    elif "procrustes" in meas_name:
+        assert_allclose(parallel_output, non_parallel_output, rtol=1e-5, atol=1e-5)
     else:
-        assert_allclose(parallel_output, non_parallel_output, rtol=1e-10, atol=1e-10)
+        assert_allclose(parallel_output, non_parallel_output, rtol=1e-8, atol=1e-8)

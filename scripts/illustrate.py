@@ -54,18 +54,32 @@ x_cond = np.where(x_plot > 1)[0][0]
 # plt.imshow(np.transpose(pdfs, (1, 2, 0)), extent=(-3, 3, -3, 3))
 plt.figure()
 plt.arrow(
-    0, 500, 1000, 0, width=1,
-    head_width=15, head_length=30, length_includes_head=True,
-    color="black")
+    0,
+    500,
+    1000,
+    0,
+    width=1,
+    head_width=15,
+    head_length=30,
+    length_includes_head=True,
+    color="black",
+)
 plt.arrow(
-    500, 0, 0, 1000, width=1,
-    head_width=15, head_length=30, length_includes_head=True,
-    color="black")
+    500,
+    0,
+    0,
+    1000,
+    width=1,
+    head_width=15,
+    head_length=30,
+    length_includes_head=True,
+    color="black",
+)
 plt.contour(pdf1, colors="red")
 plt.contour(pdf2, colors="blue")
-plt.plot([x_cond, x_cond], [0, 999], 'k--')
+plt.plot([x_cond, x_cond], [0, 999], "k--")
 plt.axis("square")
-plt.tick_params('both', direction="out")
+plt.tick_params("both", direction="out")
 plt.gca().set_axis_off()
 plt.savefig("figures/pdfcontours.pdf")
 
@@ -81,4 +95,4 @@ plt.plot(x_plot, pdf1_1d, "red")
 plt.plot(x_plot, pdf2_1d, "blue")
 plt.savefig("figures/dens1D.pdf")
 
-plt.close('all')
+plt.close("all")
