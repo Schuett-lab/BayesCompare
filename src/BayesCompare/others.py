@@ -243,12 +243,12 @@ def _procrustes_np(K1, K2):
     sigma2 = double_centering_np(K2.astype(np.float64))
 
     E_sig1, V_sig1 = np.linalg.eigh(sigma1)
-    E_sig1 = check_small_negative_eigenval(E_sig1)
+    E_sig1[E_sig1 < 0] = 0.0
     sig1_sqrt = (V_sig1 * np.sqrt(E_sig1)) @ V_sig1.T
 
     sig12 = sig1_sqrt @ sigma2 @ sig1_sqrt
     E_sig12, V_sig12 = np.linalg.eigh(sig12)
-    E_sig12 = check_small_negative_eigenval(E_sig12)
+    E_sig12[E_sig12 < 0] = 0.0
     sig1_sig2_sqrt = (V_sig12 * np.sqrt(E_sig12)) @ V_sig12.T
 
     d_sq = np.trace(sigma1 + sigma2 - 2 * (sig1_sig2_sqrt))
@@ -271,12 +271,12 @@ def _procrustes_torch(K1, K2):
     sigma2 = double_centering_torch(K2)
 
     E_sig1, V_sig1 = torch.linalg.eigh(sigma1)
-    E_sig1 = check_small_negative_eigenval(E_sig1)
+    E_sig1 = torch.clamp(E_sig1, min=0.0)
     sig1_sqrt = (V_sig1 * torch.sqrt(E_sig1)) @ V_sig1.T
 
     sig12 = sig1_sqrt @ sigma2 @ sig1_sqrt
     E_sig12, V_sig12 = torch.linalg.eigh(sig12)
-    E_sig12 = check_small_negative_eigenval(E_sig12)
+    E_sig12 = torch.clamp(E_sig12, min=0.0)
     sig1_sig2_sqrt = (V_sig12 * torch.sqrt(E_sig12)) @ V_sig12.T
 
     d_sq = torch.trace(sigma1 + sigma2 - 2 * (sig1_sig2_sqrt))
@@ -289,20 +289,19 @@ def _procrustes_torch(K1, K2):
 def _normalized_bures_similarity_np(K1, K2):
     sigma1 = double_centering_np(K1.astype(np.float64))
     sigma2 = double_centering_np(K2.astype(np.float64))
+    sig1 = trace_norm(sigma1)
+    sig2 = trace_norm(sigma2)
 
-    E_sig1, V_sig1 = np.linalg.eigh(sigma1)
+    E_sig1, V_sig1 = np.linalg.eigh(sig1)
     E_sig1 = check_small_negative_eigenval(E_sig1)
     sig1_sqrt = (V_sig1 * np.sqrt(E_sig1)) @ V_sig1.T
 
-    sig12 = sig1_sqrt @ sigma2 @ sig1_sqrt
+    sig12 = sig1_sqrt @ sig2 @ sig1_sqrt
     E_sig12, V_sig12 = np.linalg.eigh(sig12)
     E_sig12 = check_small_negative_eigenval(E_sig12)
     sig1_sig2_sqrt = (V_sig12 * np.sqrt(E_sig12)) @ V_sig12.T
 
-    num = np.trace(sig1_sig2_sqrt)
-    denum = np.sqrt(np.trace(sigma1) * np.trace(sigma2))
-
-    return num / denum
+    return np.trace(sig1_sig2_sqrt)
 
 
 def _normalized_bures_similarity_torch(K1, K2):
@@ -315,20 +314,19 @@ def _normalized_bures_similarity_torch(K1, K2):
     K2 = K2.to(torch.float64)
     sigma1 = double_centering_torch(K1)
     sigma2 = double_centering_torch(K2)
+    sig1 = trace_norm(sigma1)
+    sig2 = trace_norm(sigma2)
 
-    E_sig1, V_sig1 = torch.linalg.eigh(sigma1)
+    E_sig1, V_sig1 = torch.linalg.eigh(sig1)
     E_sig1 = check_small_negative_eigenval(E_sig1)
     sig1_sqrt = (V_sig1 * torch.sqrt(E_sig1)) @ V_sig1.T
 
-    sig12 = sig1_sqrt @ sigma2 @ sig1_sqrt
+    sig12 = sig1_sqrt @ sig2 @ sig1_sqrt
     E_sig12, V_sig12 = torch.linalg.eigh(sig12)
     E_sig12 = check_small_negative_eigenval(E_sig12)
-    sig1_sig2_sqrt = (V_sig12 * torch.sqrt(E_sig12)) @ V_sig12.T
+    sig1_sig2_sqrt = (V_sig12 * np.sqrt(E_sig12)) @ V_sig12.T
 
-    num = torch.trace(sig1_sig2_sqrt)
-    denum = torch.sqrt(torch.trace(sigma1) * torch.trace(sigma2))
-
-    return num / denum
+    return torch.trace(sig1_sig2_sqrt)
 
 
 ## Helper Functions
