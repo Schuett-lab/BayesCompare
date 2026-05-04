@@ -15,6 +15,7 @@ ALL_MEASURES = [
     "dist_corr",
     "jaccard",
     "procrustes",
+    "nbs",
 ]
 
 lmbd = 0.001
@@ -75,7 +76,12 @@ def test_large_scale_inputs(inputs, meas_name):
     output_np = []
     output_th = []
 
-    if meas_name == "gulp" or meas_name == "jaccard" or meas_name == "procrustes":
+    if (
+        meas_name == "gulp"
+        or meas_name == "jaccard"
+        or meas_name == "procrustes"
+        or meas_name == "nbs"
+    ):
         output_np.append(
             measure_dist(
                 inputs["test_large_input_data"],
@@ -150,7 +156,12 @@ def test_small_scale_inputs(inputs, meas_name):
     output_np = []
     output_th = []
 
-    if meas_name == "gulp" or meas_name == "jaccard" or meas_name == "procrustes":
+    if (
+        meas_name == "gulp"
+        or meas_name == "jaccard"
+        or meas_name == "procrustes"
+        or meas_name == "nbs"
+    ):
         output_np.append(
             measure_dist(
                 inputs["test_small_input_data"],
@@ -226,7 +237,12 @@ def test_large_and_small_scale_inputs(inputs, meas_name):
     output_th = []
 
     for pair in inputs["test_large_and_small_input"]:
-        if meas_name == "gulp" or meas_name == "jaccard" or meas_name == "procrustes":
+        if (
+            meas_name == "gulp"
+            or meas_name == "jaccard"
+            or meas_name == "procrustes"
+            or meas_name == "nbs"
+        ):
             output_np.append(
                 measure_dist(
                     pair,

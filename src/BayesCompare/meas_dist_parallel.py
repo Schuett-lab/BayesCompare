@@ -207,10 +207,6 @@ def measure_dist_parallel(
 
     covs, covs_filename = load_covs(covs_dir)
 
-    if noise_var == None:
-        dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
-        noise_var = dim * b / (1 + (dim * b))
-
     idx = np.random.randint(len(covs))
 
     # normalize and add noise
