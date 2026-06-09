@@ -44,7 +44,7 @@ def test_meas_dist_parallel(tmp_path, meas_name):
 
     cov_input_file = os.path.join(
         os.getcwd(),
-        "tests/sample_data/test_input_meas_dist_parallel.pkl",
+        "tests/sample_data/test_input_meas_dist_parallel_simplified.pkl",
     )
 
     output_dir = os.path.join(tmp_path, "results_meas_dist_parallel")
@@ -75,7 +75,7 @@ def test_meas_dist_parallel(tmp_path, meas_name):
 
     hdf_filename = os.path.join(
         output_dir,
-        f"dist_test_input_meas_dist_parallel_{simplify_string(meas_name)}.hdf5",
+        f"dist_test_input_meas_dist_parallel_simplified_{simplify_string(meas_name)}.hdf5",
     )
 
     with h5py.File(hdf_filename, "r") as f:
