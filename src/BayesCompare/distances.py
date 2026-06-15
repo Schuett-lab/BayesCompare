@@ -238,9 +238,9 @@ def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
         logdet2 = torch.sum(torch.log(torch.diag(A2)))
         # generate random samples from each distribution
         x10 = torch.randn((k, num_samples), generator=gen)
-        x1 = torch.Tensor(mm(1, A1, x10, lower=1))
+        x1 = torch.Tensor(A1 @ x10)
         x20 = torch.randn((k, num_samples), generator=gen)
-        x2 = torch.Tensor(mm(1, A2, x20, lower=1))
+        x2 = torch.Tensor(A2 @ x20)
         # compute densities for each
         p1 = -torch.sum(x10**2, 0) / 2 - logdet1
         delta21 = torch.linalg.solve_triangular(A1, x2, upper=False)
@@ -394,9 +394,9 @@ def _tvd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
         logdet2 = torch.sum(torch.log(torch.diag(A2)))
         # generate random samples from each distribution
         x10 = torch.randn((k, num_samples), generator=gen)
-        x1 = torch.Tensor(mm(1, A1, x10, lower=1))
+        x1 = torch.Tensor(A1 @ x10)
         x20 = torch.randn((k, num_samples), generator=gen)
-        x2 = torch.Tensor(mm(1, A2, x20, lower=1))
+        x2 = torch.Tensor(A2 @ x20)
         # compute densities for each
         p1 = -torch.sum(x10**2, 0) / 2 - logdet1
         delta21 = torch.linalg.solve_triangular(A1, x2, upper=False)
