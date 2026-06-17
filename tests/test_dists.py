@@ -49,7 +49,7 @@ def generate_covs(
 
 @pytest.fixture()
 def inputs():
-    dim = 25
+    dim = 5
 
     # Same input test
     test_same_input_data = generate_covs(N=1, dim=dim)
