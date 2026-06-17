@@ -36,10 +36,7 @@ from .cov_utils import (
     trace_norm_N,
     cov_sigma_N,
 )
-from .dist_utils import (
-    simplify_string,
-    check_small_negative,
-)
+from .dist_utils import simplify_string, check_small_negative, check_array
 
 ### Metrics
 
@@ -106,7 +103,7 @@ def _hellinger_numpy(sigma1, sigma2, mu1=None, mu2=None):
 
     d_sq = check_small_negative(d_sq)
 
-    return d_sq**0.5
+    return check_array(d_sq**0.5)
 
 
 def _hellinger_torch(sigma1, sigma2, mu1=None, mu2=None):
@@ -117,7 +114,7 @@ def _hellinger_torch(sigma1, sigma2, mu1=None, mu2=None):
 
     d_sq = check_small_negative(d_sq)
 
-    return d_sq**0.5
+    return check_array(d_sq**0.5)
 
 
 def _mahalanobis_numpy(
@@ -134,7 +131,7 @@ def _mahalanobis_numpy(
         )
         d_sq = check_small_negative(d_sq)
 
-    return d_sq**0.5
+    return check_array(d_sq**0.5)
 
 
 def _mahalanobis_torch(
@@ -153,7 +150,7 @@ def _mahalanobis_torch(
         )
         d_sq = check_small_negative(d_sq)
 
-    return d_sq**0.5
+    return check_array(d_sq**0.5)
 
 
 def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
@@ -476,7 +473,7 @@ def _bhattacharyya_numpy(sigma1, sigma2, mu1=None, mu2=None):
 
     d = check_small_negative(d)
 
-    return d
+    return check_array(d)
 
 
 def _bhattacharyya_torch(sigma1, sigma2, mu1=None, mu2=None):
@@ -490,7 +487,7 @@ def _bhattacharyya_torch(sigma1, sigma2, mu1=None, mu2=None):
 
     d = check_small_negative(d)
 
-    return d
+    return check_array(d)
 
 
 ## Distance function caller

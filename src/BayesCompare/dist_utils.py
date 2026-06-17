@@ -1,6 +1,7 @@
 import re
 import torch
 import numpy as np
+import warnings
 
 
 def simplify_string(s: str) -> str:
@@ -9,6 +10,26 @@ def simplify_string(s: str) -> str:
     - remove underscores, dashes, and spaces
     """
     return re.sub(r"[ _-]+", "", s.lower())
+
+
+def check_array(dist_output):
+    if isinstance(dist_output, np.ndarray):
+        if dist_output.shape[0] == 1 and len(dist_output.shape) == 1:
+            return dist_output.item()
+        else:
+            raise ValueError(
+                "Distance output is a numpy array with more than one element."
+            )
+    elif isinstance(dist_output, torch.Tensor):
+        if dist_output.ndim == 0:
+            return dist_output
+        elif dist_output.shape[0] == 1 and len(dist_output.shape) == 1:
+            return dist_output.item()
+        else:
+            raise ValueError(
+                "Distance output is a torch tensor with more than one element."
+            )
+    return dist_output
 
 
 def check_small_negative(d):
