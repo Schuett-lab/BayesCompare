@@ -432,7 +432,9 @@ def _KL_div_numpy(sigma1, sigma2, mu1=0, mu2=0):
         )
         mean_term = 0.25 * mean_term
 
-    return 0.25 * (tr_21 + tr_12) - 0.5 * sigma1.shape[0] + mean_term
+    d = check_small_negative(0.25 * (tr_21 + tr_12) - 0.5 * sigma1.shape[0] + mean_term)
+
+    return d
 
 
 def _KL_div_torch(sigma1, sigma2, mu1=0, mu2=0):
@@ -459,7 +461,9 @@ def _KL_div_torch(sigma1, sigma2, mu1=0, mu2=0):
 
         mean_term = 0.25 * mean_term
 
-    return 0.25 * (tr_21 + tr_12) - 0.5 * sigma1.shape[0] + mean_term
+    d = check_small_negative(0.25 * (tr_21 + tr_12) - 0.5 * sigma1.shape[0] + mean_term)
+
+    return d
 
 
 def _bhattacharyya_numpy(sigma1, sigma2, mu1=None, mu2=None):

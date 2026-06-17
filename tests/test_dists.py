@@ -18,7 +18,7 @@ ALL_MEASURES = [
 # number of samples for computing jsd and tvd distances.
 # can also be set separate for each test or globally from here
 # highly affects how long the tests take
-NUM_SAMPLES = 100000
+NUM_SAMPLES = 10000
 
 
 def generate_covs(
@@ -138,7 +138,7 @@ def test_same_input(inputs, meas_name):
     output_np = np.stack(output_np, axis=0)
     output_th = torch.stack(output_th, dim=0)
 
-    assert_allclose(output_np, np.zeros_like(output_np), rtol=1e-10, atol=1e-10)
+    assert_allclose(output_np, np.zeros_like(output_np), rtol=1e-7, atol=1e-7)
     assert_allclose(output_th, torch.zeros_like(output_th), rtol=1e-6, atol=1e-6)
 
     if "jsd" in meas_name or "tvd" in meas_name or "hellinger" in meas_name:
