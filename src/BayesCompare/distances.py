@@ -1,10 +1,19 @@
+"""
+Module for camputing distances between prior predictive distributions (BayesCompare measures)
+or existing representational similarity measures in the literature computed with second moment matrix.
+Authors: Sezan Oral, Heiko Schütt
+"""
+
 import numpy as np
+import torch
+import tqdm
 import scipy.linalg
 from scipy.linalg.blas import dtrmm as mm
-import tqdm
-import torch
 from scipy.linalg import cho_factor, cho_solve
-from typing import Sequence, Union, Optional
+
+from typing import Sequence, Optional, Callable
+from numpy.typing import NDArray
+from types import ModuleType
 
 from .others import (
     _cka_np,
@@ -41,8 +50,13 @@ from .dist_utils import simplify_string, check_small_negative, check_array
 ### Metrics
 
 
-def _wasserstein_numpy(sigma1, sigma2, mu1=None, mu2=None):
-
+def _wasserstein_numpy(
+    sigma1: NDArray, sigma2: NDArray, mu1: NDArray = None, mu2: NDArray = None
+) -> float:
+    """
+    Computes the Wasserstein distance between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    Implementation based on Peyré and Cuturi (2019).
+    """
     if mu1 is None:
         if mu2 is None:
             means_term = 0
@@ -55,16 +69,24 @@ def _wasserstein_numpy(sigma1, sigma2, mu1=None, mu2=None):
 
     sig1_sqrt = scipy.linalg.sqrtm(sigma1)
     sig1_sig2_sqrt = scipy.linalg.sqrtm(sig1_sqrt @ sigma2 @ sig1_sqrt)
+
     tr_term = sigma1 + sigma2 - 2 * (sig1_sig2_sqrt)
     d_sq = means_term + np.trace(tr_term)
-
     d_sq = check_small_negative(d_sq)
 
-    return d_sq**0.5
+    return check_array(d_sq**0.5)
 
 
-def _wasserstein_torch(sigma1, sigma2, mu1=None, mu2=None):
-
+def _wasserstein_torch(
+    sigma1: torch.Tensor,
+    sigma2: torch.Tensor,
+    mu1: torch.Tensor = None,
+    mu2: torch.Tensor = None,
+) -> float:
+    """
+    Computes the Wasserstein distance between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    Implementation based on Peyré and Cuturi (2019).
+    """
     if mu1 is None:
         if mu2 is None:
             means_term = 0
@@ -89,38 +111,51 @@ def _wasserstein_torch(sigma1, sigma2, mu1=None, mu2=None):
 
     tr_term = sigma1 + sigma2 - 2 * (sig1_sig2_sqrt)
     d_sq = means_term + torch.trace(tr_term)
-
-    d_sq = check_small_negative(d_sq)
-
-    return d_sq**0.5
-
-
-def _hellinger_numpy(sigma1, sigma2, mu1=None, mu2=None):
-
-    d_B = _bhattacharyya_numpy(sigma1, sigma2, mu1, mu2)
-
-    d_sq = 1 - np.exp(-d_B)
-
     d_sq = check_small_negative(d_sq)
 
     return check_array(d_sq**0.5)
 
 
-def _hellinger_torch(sigma1, sigma2, mu1=None, mu2=None):
+def _hellinger_numpy(
+    sigma1: NDArray, sigma2: NDArray, mu1: NDArray = None, mu2: NDArray = None
+) -> float:
+    """
+    Computes the Hellinger (Jeffreys-Matusita) distance between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    Implementation based on Pardo (2018).
+    """
+    d_B = _bhattacharyya_numpy(sigma1, sigma2, mu1, mu2)
+    d_sq = 1 - np.exp(-d_B)
+    d_sq = check_small_negative(d_sq)
 
+    return check_array(d_sq**0.5)
+
+
+def _hellinger_torch(
+    sigma1: torch.Tensor,
+    sigma2: torch.Tensor,
+    mu1: torch.Tensor = None,
+    mu2: torch.Tensor = None,
+) -> float:
+    """
+    Computes the Hellinger (Jeffreys-Matusita) distance between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    Implementation based on Pardo (2018).
+    """
     d_B = _bhattacharyya_torch(sigma1, sigma2, mu1, mu2)
-
     d_sq = 1 - torch.exp(-d_B)
-
     d_sq = check_small_negative(d_sq)
 
     return check_array(d_sq**0.5)
 
 
 def _mahalanobis_numpy(
-    sigma1, sigma2, mu1=None, mu2=None
-):  # not the true mahalanobis definition
-
+    sigma1: NDArray, sigma2: NDArray, mu1: NDArray = None, mu2: NDArray = None
+) -> float:  # not the true mahalanobis definition
+    """
+    Computes the Mahalanobis "term" between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    Equal to zero if both means are None.
+    The original definition in Mahalanobis requires two Gaussians to have thte same covariance matrix. Therefore, this is not the true Mahalanobis distance, but rather a generalization of it.
+    Implementation based on Stackoverflow answer: https://stats.stackexchange.com/q/106352
+    """
     if mu1 is None and mu2 is None:
         d_sq = np.array([0.0])
     else:
@@ -135,9 +170,17 @@ def _mahalanobis_numpy(
 
 
 def _mahalanobis_torch(
-    sigma1, sigma2, mu1=None, mu2=None
-):  # not the true mahalanobis definition
-
+    sigma1: torch.Tensor,
+    sigma2: torch.Tensor,
+    mu1: torch.Tensor = None,
+    mu2: torch.Tensor = None,
+) -> float:  # not the true mahalanobis definition
+    """
+    Computes the Mahalanobis "term" between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    Equal to zero if both means are None.
+    The original definition in Mahalanobis requires two Gaussians to have thte same covariance matrix. Therefore, this is not the true Mahalanobis distance, but rather a generalization of it.
+    Implementation based on Stackoverflow answer: https://stats.stackexchange.com/q/106352
+    """
     if mu1 is None and mu2 is None:
         d_sq = torch.Tensor([0.0])
     else:
@@ -153,8 +196,18 @@ def _mahalanobis_torch(
     return check_array(d_sq**0.5)
 
 
-def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
-
+def _jsd_numpy(
+    sigma1: NDArray,
+    sigma2: NDArray,
+    mu1: NDArray = None,
+    mu2: NDArray = None,
+    num_samples: int = 10000,
+    gen: Optional[np.random.Generator] = None,
+) -> float:
+    """
+    Computes the Jensen-Shannon distance between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    Implementation based on Endres and Schindelin (2003).
+    """
     if gen == None:
         gen = np.random.Generator(np.random.SFC64())
 
@@ -176,7 +229,6 @@ def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
         delta12 = scipy.linalg.solve_triangular(A2, x1, lower=True)
         q1 = -np.sum(delta12**2, 0) / 2 - logdet2
         q2 = -np.sum(x20**2, 0) / 2 - logdet2
-
         # log (P) - log (P + Q)
         term1 = p1 - np.logaddexp(p1, q1)
         term2 = q2 - np.logaddexp(p2, q2)
@@ -206,18 +258,27 @@ def _jsd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
         q1 = -np.sum(delta12**2, 0) / 2 - logdet2
         delta22 = Ainv2 @ (x2 - np.expand_dims(mu2, 1))
         q2 = -np.sum(delta22**2, 0) / 2 - logdet2
-
         # log (P) - log (P + Q)
         term1 = p1 - np.logaddexp(p1, q1)
         term2 = q2 - np.logaddexp(p2, q2)
 
         jsd = 1 + (np.mean(term1) + np.mean(term2)) / 2 / np.log(2)
 
-    return max(0, jsd)
+    return max(0.0, jsd)
 
 
-def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
-
+def _jsd_torch(
+    sigma1: torch.Tensor,
+    sigma2: torch.Tensor,
+    mu1: torch.Tensor = None,
+    mu2: torch.Tensor = None,
+    num_samples: int = 10000,
+    gen: Optional[torch.Generator] = None,
+) -> float:
+    """
+    Computes the Jensen-Shannon distance between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    Implementation based on Endres and Schindelin (2003).
+    """
     if gen == None:
         gen = torch.Generator(device=sigma1.device)
 
@@ -227,7 +288,6 @@ def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
         sigma2 = torch.tensor(sigma2)
 
     if mu1 is None and mu2 is None:
-
         k = sigma1.shape[0]
         A1 = torch.linalg.cholesky(sigma1)
         A2 = torch.linalg.cholesky(sigma2)
@@ -245,7 +305,6 @@ def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
         delta12 = torch.linalg.solve_triangular(A2, x1, upper=False)
         q1 = -torch.sum(delta12**2, 0) / 2 - logdet2
         q2 = -torch.sum(x20**2, 0) / 2 - logdet2
-
         # log (P) - log (P + Q)
         term1 = p1 - torch.logaddexp(p1, q1)
         term2 = q2 - torch.logaddexp(p2, q2)
@@ -253,11 +312,9 @@ def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
         jsd = 1 + (torch.mean(term1) + torch.mean(term2)) / 2 / np.log(2)
 
     else:
-
         k = len(mu1)
         A1 = torch.linalg.cholesky(sigma1)
         A2 = torch.linalg.cholesky(sigma2)
-
         Ainv1 = torch.linalg.solve_triangular(A1, torch.eye(k), lower=True)
         Ainv2 = torch.linalg.solve_triangular(A2, torch.eye(k), lower=True)
         # generate random samples from each distribution
@@ -279,18 +336,26 @@ def _jsd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
         q1 = -torch.sum(delta12**2, 0) / 2 - logdet2
         delta22 = Ainv2 @ (x2 - torch.Tensor.expand(mu2, 1))
         q2 = -torch.sum(delta22**2, 0) / 2 - logdet2
-
         # log (P) - log (P + Q)
         term1 = p1 - torch.logaddexp(p1, q1)
         term2 = q2 - torch.logaddexp(p2, q2)
 
         jsd = 1 + (torch.mean(term1) + torch.mean(term2)) / 2 / torch.log(2)
 
-    return max(0, jsd)
+    return max(0.0, jsd)
 
 
-def _tvd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
-
+def _tvd_numpy(
+    sigma1: NDArray,
+    sigma2: NDArray,
+    mu1: NDArray = None,
+    mu2: NDArray = None,
+    num_samples: int = 10000,
+    gen: Optional[np.random.Generator] = None,
+) -> float:
+    """
+    Computes the Total Variation Distance between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    """
     if gen == None:
         gen = np.random.Generator(np.random.SFC64())
 
@@ -341,11 +406,20 @@ def _tvd_numpy(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
         f2 = np.maximum(1 - np.exp(p2 - q2), 0)
         tvd = (np.mean(f1) + np.mean(f2)) / 2
 
-    return max(0, tvd)
+    return max(0.0, tvd)
 
 
-def _tvd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
-
+def _tvd_torch(
+    sigma1: torch.Tensor,
+    sigma2: torch.Tensor,
+    mu1: torch.Tensor = None,
+    mu2: torch.Tensor = None,
+    num_samples: int = 10000,
+    gen: Optional[torch.Generator] = None,
+) -> float:
+    """
+    Computes the Total Variation Distance between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    """
     if gen == None:
         gen = torch.Generator(device=sigma1.device)
 
@@ -405,26 +479,30 @@ def _tvd_torch(sigma1, sigma2, mu1=None, mu2=None, num_samples=10000, gen=None):
         f2 = torch.max(1 - torch.exp(p2 - q2), torch.zeros_like(p2))
         tvd = (torch.mean(f1) + torch.mean(f2)) / 2
 
-    return max(0, tvd)
+    return max(0.0, tvd)
 
 
 ## Divergences
 
 
-def _KL_div_numpy(sigma1, sigma2, mu1=0, mu2=0):
-
+def _KL_div_numpy(
+    sigma1: NDArray,
+    sigma2: NDArray,
+    mu1: NDArray = None,
+    mu2: NDArray = None,
+) -> float | NDArray | torch.Tensor:
+    """
+    Computes the symmetric Kullback-Leibler divergence between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    Implementation based on Kullback and Leibler (1951).
+    """
     c2, lower2 = cho_factor(sigma2)
     c1, lower1 = cho_factor(sigma1)
-
     tr_21 = np.trace(cho_solve((c2, lower2), sigma1))
     tr_12 = np.trace(cho_solve((c1, lower1), sigma2))
 
-    if mu1 == 0 and mu2 == 0:
-
+    if mu1 == None and mu2 == None:
         mean_term = 0
-
     else:
-
         delta_mu = np.subtract(mu1, mu2)
         mean_term = np.inner(
             delta_mu,
@@ -433,24 +511,27 @@ def _KL_div_numpy(sigma1, sigma2, mu1=0, mu2=0):
         mean_term = 0.25 * mean_term
 
     d = check_small_negative(0.25 * (tr_21 + tr_12) - 0.5 * sigma1.shape[0] + mean_term)
-
     return d
 
 
-def _KL_div_torch(sigma1, sigma2, mu1=0, mu2=0):
-
+def _KL_div_torch(
+    sigma1: torch.Tensor,
+    sigma2: torch.Tensor,
+    mu1: torch.Tensor = None,
+    mu2: torch.Tensor = None,
+) -> float | NDArray | torch.Tensor:
+    """
+    Computes the symmetric Kullback-Leibler divergence between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    Implementation based on Kullback and Leibler (1951).
+    """
     c2 = torch.linalg.cholesky(sigma2)
     c1 = torch.linalg.cholesky(sigma1)
-
     tr_21 = torch.trace(torch.cholesky_solve(sigma1, c2))
     tr_12 = torch.trace(torch.cholesky_solve(sigma2, c1))
 
-    if mu1 == 0 and mu2 == 0:
-
+    if mu1 == None and mu2 == None:
         mean_term = 0
-
     else:
-
         delta_mu = torch.subtract(mu1, mu2)
         mean_term = torch.inner(
             delta_mu,
@@ -458,49 +539,59 @@ def _KL_div_torch(sigma1, sigma2, mu1=0, mu2=0):
                 (torch.linalg.inv(sigma1) + torch.linalg.inv(sigma2), delta_mu)
             ),
         )
-
         mean_term = 0.25 * mean_term
 
     d = check_small_negative(0.25 * (tr_21 + tr_12) - 0.5 * sigma1.shape[0] + mean_term)
-
     return d
 
 
-def _bhattacharyya_numpy(sigma1, sigma2, mu1=None, mu2=None):
-
+def _bhattacharyya_numpy(
+    sigma1: NDArray,
+    sigma2: NDArray,
+    mu1: NDArray = None,
+    mu2: NDArray = None,
+) -> float:
+    """
+    Computes the Bhattacharyya distance between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    Implementation based on Kashyap (2019).
+    """
     means_term = _mahalanobis_numpy(sigma1, sigma2, mu1, mu2)
     log_term = np.linalg.slogdet(np.divide(sigma1 + sigma2, 2))[1] - 0.5 * (
         np.linalg.slogdet(sigma1)[1] + np.linalg.slogdet(sigma2)[1]
     )  # these may also require float64 casting
 
     d = (1 / 8) * means_term + (1 / 2) * log_term
-
     d = check_small_negative(d)
-
     return check_array(d)
 
 
-def _bhattacharyya_torch(sigma1, sigma2, mu1=None, mu2=None):
-
+def _bhattacharyya_torch(
+    sigma1: torch.Tensor,
+    sigma2: torch.Tensor,
+    mu1: torch.Tensor = None,
+    mu2: torch.Tensor = None,
+) -> float:
+    """
+    Computes the Bhattacharyya distance between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
+    Implementation based on Kashyap (2019).
+    """
     means_term = _mahalanobis_torch(sigma1, sigma2, mu1, mu2)
     log_term = torch.linalg.slogdet(torch.divide(sigma1 + sigma2, 2))[1] - 0.5 * (
         torch.linalg.slogdet(sigma1)[1] + torch.linalg.slogdet(sigma2)[1]
     )  # these may also require float64 casting
 
     d = (1 / 8) * means_term + (1 / 2) * log_term
-
     d = check_small_negative(d)
-
     return check_array(d)
 
 
 ## Distance function caller
 
 
-## no check points, no parallelization, single measure only and torch compatable (after correcting select measure for torch comp measures too)
+## no check points, no parallelization, single measure only
 def measure_dist(
-    covs: Union[Sequence[Union[np.ndarray, torch.Tensor]], np.ndarray, torch.Tensor],
-    mean: Optional[Union[Sequence[int], np.ndarray, torch.Tensor]] = None,
+    covs: NDArray | torch.Tensor | Sequence[NDArray | torch.Tensor],
+    mean: Optional[NDArray | torch.Tensor | Sequence[int]] = None,
     meas_name: str = "TVD",
     noise_var: Optional[float] = None,
     b: float = 0.0,
@@ -508,31 +599,28 @@ def measure_dist(
     samples_jsd_tvd: int = 10000,
     lmbd: Optional[float] = None,
     k: Optional[int] = None,
-    generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
-    show_progress: Optional[bool] = True,
-):
+    generator: Optional[np.random.Generator | torch.Generator] = None,
+    show_progress: bool = True,
+) -> NDArray | torch.Tensor:
     """
-    Compute a symmetric pairwise distance matrix from the list of covariances.
+    Compute a symmetric pairwise distance matrix from the list of covariance matrices and optionally mean vectors.
 
-    This function takes a sequence of covariance matrices, applies a trace-normalization
-    step to each (via `trace_norm` with an `eye_w` regularizer), selects a distance/divergence
-    function by name (via `select_measure`), and computes the upper-triangular pairwise distances. The
-    result is returned as a symmetric NumPy array of shape (N, N), where N is the
-    number of input covariance matrices.
+    It expects covariances matrices to be symmetric and positive semi-definite.
+    It trace-normalizes the covariance matrices to have trace equals to N (dimension of the square matrix) by default and
+    converts covariance arrays into a list of square matrices.
 
     Parameters
     ----------
-    covs : Sequence[array-like]
-        Iterable of covariance matrices (e.g., NumPy arrays).
+    covs : NDArray or torch.Tensor or a list/tuple of either of these types
+        A NumPy array or PyTorch tensor with shape (N, dim, dim) or a list/tuple of N matrices with shape (dim, dim).
     mean : array-like, optional
-        Mean parameter.
+        Mean vactor of shape (N, dim).
     meas_name : str, optional
-        Name of the distance/divergence measure to use. This name is resolved via
-        `select_measure(meas_name)`. Default is "TVD".
+        Name of the distance/divergence measure to use. This name is resolved via `select_measure(meas_name)`. Default is "TVD".
     noise_var : float, optional
-        Noise variance to be applied in the normalization if the matrices are not already normalized.
-        If None, noise_var is computed from the number of images (dim) used to obtain the cov matrix and
-        the parameter `b` using the formula
+        Additive noise variance to be added to the covariance matrices.
+        If None, and a `b` value is provided, then noise_var is computed from the number of images (dim)
+        used to obtain the cov matrix and the parameter `b` using the formula
         noise_var = (dim * b) / (1 + (dim * b)).
         It overwrites b if both is provided. Default is None.
     b : float, optional
@@ -541,16 +629,16 @@ def measure_dist(
         Flag for selecting to apply trace normalization or not. Defaults to True (normalization is applied by default).
     samples_jsd_tvd : integer, optional
         Number of samples used for computing JSD and TVD measures. Defaults to 10000.
-    show_progress : bool, optional
-        Boolean to turn the tqdm progress bars on (True) or off (False). Default is on (True).
     generator: np.random.Generator or torch.Generator, optional
         A Generator object for the randomization for generating samples for JSD and TVD computations. Default is None.
+    show_progress : bool, optional
+        Boolean to turn the tqdm progress bars on (True) or off (False). Default is on (True).
 
     Returns
     -------
     dist : numpy.ndarray or torch.Tensor
-        A symmetric 2-D array of shape (N, N) containing pairwise distances
-        between trace-normalized and noise added covariance inputs. The diagonal elements are zero.
+        A symmetric 2-D array of shape (N, N) containing pairwise distances covariance inputs.
+        The diagonal elements are zero.
         Only the upper triangle (j > i) is computed explicitly and mirrored to the
         lower triangle.
 
@@ -559,12 +647,8 @@ def measure_dist(
     >>> # Given a list of covariance matrices `cov_list`
     >>> dist_matrix = measure_dist(cov_list, meas_name="TVD")
     """
-
-    idx = np.random.randint(len(covs))
-
     # normalize and add noise
     if normalize and (b != 0 or noise_var):
-
         if noise_var == None:  # if noise_var was not given but b is given
             dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
             noise_var = dim * b / (1 + (dim * b))
@@ -573,12 +657,10 @@ def measure_dist(
 
     # normalize but don't add noise
     elif normalize and not (b) and not (noise_var):
-
         covs = trace_norm_N(covs)
 
     # don't normalize but add noise
     elif not (normalize) and (b != 0 or noise_var):
-
         if noise_var == None:  # if noise_var was not given but b is given
             dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
             noise_var = dim * b / (1 + (dim * b))
@@ -587,6 +669,7 @@ def measure_dist(
 
     covs, N, module = check_and_change_input_format(covs)
 
+    idx = np.random.randint(len(covs))
     symmetric = check_cov_symmetry(covs[idx])
     if not symmetric:
         raise ValueError(
@@ -602,7 +685,6 @@ def measure_dist(
 
     for i, ci in enumerate(covs):
         for j, cj in enumerate(covs):
-
             if j > i:
                 if "tvd" in meas_name or "jsd" in meas_name:
                     dist[i, j] = measure(
@@ -626,11 +708,13 @@ def measure_dist(
 ## Helper functions
 
 
-def select_measure(cov_mtx, meas_name, module=None):
+def select_measure(
+    cov_mtx: NDArray | torch.Tensor, meas_name: str, module: Optional[ModuleType] = None
+) -> Callable:
     """
-    Select and return the appropriate distance measure function based on input parameters.
+    Select and return the appropriate distance measure function based on input covariances and measure name.
 
-    This function selects a distance/similarity measure function that is compatible with
+    Selects a distance/similarity measure function that is compatible with
     the given covariance matrix type (NumPy array or PyTorch tensor) and the specified
     metric name.
 
@@ -641,9 +725,7 @@ def select_measure(cov_mtx, meas_name, module=None):
         type if not explicitly provided, and to determine device placement (CPU/GPU)
         for PyTorch tensors.
     meas_name : str
-        The name of the distance measure to use. Case-insensitive. Supported measures
-        include: "wasserstein", "hellinger", "tvd", "jsd", "kl divergence", "bhattacharyya",
-        and "mahalanobis".
+        The name of the distance measure to use. Case-insensitive. Supported measures are listed in `DISTANCES` dictionary below.
     module : {np, torch}, optional
         The module type indicating whether to use NumPy or PyTorch implementations.
         If None (default), the module type is inferred from cov_mtx using check_input_format.
@@ -670,21 +752,17 @@ def select_measure(cov_mtx, meas_name, module=None):
     if module == np:
         try:
             measure = REGISTRY["numpy"][meas_name]
-
         except KeyError:
             raise NotImplementedError(
                 "Given metric name is not valid for Numpy array covariances."
             )
-
     elif module == torch:
         try:
             measure = REGISTRY["torch"][meas_name]
-
         except KeyError:
             raise NotImplementedError(
                 "Given metric name is not valid for Tensor tensor covariances."
             )
-
     else:
         raise NotImplementedError(
             "Covariance matrices must be either a torch tensor or a numpy array."
