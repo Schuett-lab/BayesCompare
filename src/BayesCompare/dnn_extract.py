@@ -149,6 +149,9 @@ def act_extractor_batch(
     if type(layer_list) == str:
         layer_list = [layer_list]
 
+    if isinstance(inputs, np.ndarray):
+        inputs = torch.from_numpy(inputs)
+
     if layer_by_layer:
         layer_out_list = [
             f"{out_dir}/activations_{out_filename}_{layer_name}.hdf5"
@@ -288,8 +291,8 @@ def compute_covs_from_act_files(
             f"{out_dir}/activations_{out_filename}_{layer_name}.hdf5"
             for layer_name in layer_list
         ]
-        for activations_filename in layer_out_list:
-            layer_name = activations_filename.split("_")[-1]
+        for k, activations_filename in enumerate(layer_out_list):
+            layer_name = layer_list[k]
 
             with h5py.File(activations_filename) as f:
                 activations = f["activations"][...]
@@ -307,7 +310,7 @@ def compute_covs_from_act_files(
                 layer_cov = get_cov(activations)
             covs_dict[layer_name] = layer_cov
 
-        cov_out_filename = f"{out_dir}/covs_{out_filename}_{layer_name}.pkl"
+        cov_out_filename = f"{out_dir}/covs_{out_filename}.pkl"
         with open(cov_out_filename, "wb") as f:
             pickle.dump(covs_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
         print(f"\nSaved covariance for layer {layer_name} at {cov_out_filename}.")
@@ -385,9 +388,12 @@ def cov_extractor_batch(
             layer_by_layer=layer_by_layer,
         )
         if delete_act_files:
-            layer_out_list = [
-                f"{out_dir}/activations_{out_filename}_{layer_name}.hdf5"
-                for layer_name in layer_list
-            ]
+            if layer_by_layer:
+                layer_out_list = [
+                    f"{out_dir}/activations_{out_filename}_{layer_name}.hdf5"
+                    for layer_name in layer_list
+                ]
+            else:
+                layer_out_list = [f"{out_dir}/activations_{out_filename}.hdf5"]
             for layer_activation_file in layer_out_list:
                 os.remove(layer_activation_file)

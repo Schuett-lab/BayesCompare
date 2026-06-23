@@ -29,8 +29,6 @@ ALL_MEASURES = [
     "nbs",
 ]
 
-home_path = Path.home()
-
 # number of samples for computing jsd and tvd distances.
 # can also be set separate for each test or globally from here
 # highly affects how long the tests take
