@@ -36,7 +36,7 @@ class TinyNet(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.linear_1_2 = nn.Linear(16, 8, bias=False)
+        self.linear_1_2 = nn.Linear(192, 8, bias=False)  # 3×8×8 = 192
         self.relu = nn.ReLU()
         self.linear_2_4 = nn.Linear(8, 4, bias=False)
 
@@ -49,15 +49,14 @@ class TinyNet(nn.Module):
 @pytest.fixture
 def model():
     net = TinyNet()
-    net.eval()
     return net
 
 
 @pytest.fixture
 def inputs_np():
-    """20 samples × 16 features, float32, fixed seed."""
+    """20 RGB images of 8×8, float32, fixed seed."""
     rng = np.random.default_rng(0)
-    return rng.standard_normal((20, 16)).astype(np.float32)
+    return rng.standard_normal((20, 3, 8, 8)).astype(np.float32)
 
 
 @pytest.fixture
@@ -101,10 +100,12 @@ class TestGradOutputStructure:
             assert isinstance(val, torch.Tensor), f"{key} value is not a torch.Tensor"
 
     def test_cov_shape_is_square(self, model, inputs_np, layer_list):
+        n = inputs_np.shape[0]
         result = cov_extractor_grad(model, inputs_np, layer_list)
         for key, val in result.items():
             assert val.dim() == 2, f"{key}: expected 2-D tensor"
             assert val.shape[0] == val.shape[1], f"{key}: covariance not square"
+            assert val.shape[0] == val.shape[1] == n, f"{key}: covariance is not n by n"
 
     def test_activation_shape_has_n_images_dimension(
         self, model, inputs_np, layer_list
@@ -149,7 +150,7 @@ class TestGradMathCorrectness:
             ), f"{key}: covariance has negative eigenvalue {eigenvalues.min():.3e}"
 
     def test_matches_numpy_cov_oracle(self, model, inputs_np, layer_list):
-        """Full covariance matrix must match np.cov on the raw activations."""
+        """Full covariance matrix must match act @ act.T on the raw activations."""
         activations = cov_extractor_grad(
             model, inputs_np, layer_list, compute_covs=False
         )
@@ -167,17 +168,13 @@ class TestGradMathCorrectness:
                 err_msg=f"{key}: covariance doesn't match oracle",
             )
 
-    def test_golden_2x2_exact(self):
+    def test_golden_2x2x2_exact(self):
         """
         Hand-crafted golden test with exact rational arithmetic.
 
         Network: single Linear(2, 2, bias=False) with weight W = [[1, 0], [0, 1]] (identity).
-        Inputs: X = [[1, 2], [3, 4]]  → activations == inputs.
-
-        E[x]  = [2, 3]
-        Cov   = (1/(n-1)) * sum_i (x_i - mean)(x_i - mean)^T
-              = (1/1) * [[-1, -1]^T [-1, -1] + [[1, 1]^T [1, 1]]
-              = [[1, 1], [1, 1]]
+        Inputs: X = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]  → activations == inputs.
+        Cov   = [[30.0, 70.0], [70.0, 174.0]]
         """
 
         # Build identity-weight model
@@ -192,9 +189,11 @@ class TestGradMathCorrectness:
                 return self.layer(x)
 
         net = IdentityNet().eval()
-        X = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+        X = np.array(
+            [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]], dtype=np.float32
+        )
 
-        expected = X @ X.T
+        expected = [[30.0, 70.0], [70.0, 174.0]]
 
         result = cov_extractor_grad(net, X, "linear_1_1")["linear_1_1"]
 
@@ -384,7 +383,7 @@ class TestEdgeCases:
 
     def test_single_image_does_not_crash(self, model):
         """n=1 is an edge case; at minimum it should not raise."""
-        single = np.random.randn(1, 16).astype(np.float32)
+        single = np.random.randn(1, 3, 8, 8).astype(np.float32)
         # May warn or return NaN cov, but must not crash
         try:
             result = cov_extractor_grad(model, single, "linear_1_2")
@@ -465,6 +464,7 @@ class TestReproducibility:
 
     def test_batch_reproducibility(self, model, inputs_np, layer_list, tmp_path):
         """Two batch runs with the same seed must produce identical pickle files."""
+        # this test runs correctly as the model and input are deterministic but is not valid for cov_extractor_batch
         for run, name in enumerate(["run1", "run2"]):
             out = str(tmp_path / f"out_{name}")
             os.makedirs(out)
