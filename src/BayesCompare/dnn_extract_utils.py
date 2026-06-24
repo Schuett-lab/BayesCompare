@@ -123,3 +123,56 @@ def create_covs_dict(
             covs_dict[layer_name] = trace_obj[layer_name].tensor
 
     return covs_dict
+
+
+def get_model_device_dtype(model: torch.nn.Module):
+    """Finds on which device a model is and with which datatype a model works"""
+    try:
+        p = next(model.parameters())
+        device = p.device
+        dtype = p.dtype if p.dtype.is_floating_point else torch.float32
+    except StopIteration:
+        device = torch.device("cpu")
+        dtype = torch.float32
+
+    return device, dtype
+
+
+def make_mock_input(
+    model: torch.nn.Module,
+    input_shape: tuple[int, ...] | None = None,
+    batch_size: int = 1,
+) -> torch.Tensor:
+    device, dtype = get_model_device_dtype(model)
+    """ Creates mock input given a torch.nn network"""
+    if input_shape is not None:
+        return torch.randn(*input_shape, device=device, dtype=dtype)
+
+    # Try to infer from the first recognizable layer
+    for module in model.modules():
+        if module is model:
+            continue
+
+        if isinstance(module, torch.nn.Linear):
+            return torch.randn(
+                batch_size, module.in_features, device=device, dtype=dtype
+            )
+
+        if isinstance(module, torch.nn.Conv1d):
+            return torch.randn(
+                batch_size, module.in_channels, 32, device=device, dtype=dtype
+            )
+
+        if isinstance(module, torch.nn.Conv2d):
+            return torch.randn(
+                batch_size, module.in_channels, 32, 32, device=device, dtype=dtype
+            )
+
+        if isinstance(module, torch.nn.Conv3d):
+            return torch.randn(
+                batch_size, module.in_channels, 16, 16, 16, device=device, dtype=dtype
+            )
+
+    raise ValueError(
+        "Could not infer a valid input shape. Please provide input_shape explicitly."
+    )

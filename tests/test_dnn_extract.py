@@ -25,7 +25,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from BayesCompare import cov_extractor, cov_extractor_batch
+from BayesCompare import cov_extractor, cov_extractor_batch, get_layer_names
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -74,6 +74,45 @@ def layer_list():
 def tmp_out(tmp_path):
     """Temporary output directory."""
     return str(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# 1. Obtaining correct layer names  —  get_layer_names
+# ---------------------------------------------------------------------------
+
+
+class TestLayerNames:
+    def test_get_correct_layer_names_with_input(self, model, inputs_np):
+        expected = [
+            "input_1",
+            "view_1_1",
+            "linear_1_2",
+            "relu_1_3",
+            "linear_2_4",
+            "output_1",
+        ]
+        result = get_layer_names(model=model, mock_input=inputs_np)
+        assert len(expected) == len(result)
+        for i, layer_name in enumerate(expected):
+            assert (
+                result[i] == layer_name
+            ), f"Layer name difference at [{i}]: expected {layer_name}, got {result[i]}"
+
+    def test_get_correct_layer_names_without_input(self, model):
+        expected = [
+            "input_1",
+            "view_1_1",
+            "linear_1_2",
+            "relu_1_3",
+            "linear_2_4",
+            "output_1",
+        ]
+        result = get_layer_names(model=model)
+        assert len(expected) == len(result)
+        for i, layer_name in enumerate(expected):
+            assert (
+                result[i] == layer_name
+            ), f"Layer name difference at [{i}]: expected {layer_name}, got {result[i]}"
 
 
 # ---------------------------------------------------------------------------

@@ -2,19 +2,22 @@ import torch
 import numpy as np
 import torchlens as tl
 from functools import partial
-from .dnn_extract_utils import get_cov, create_covs_dict
+from .dnn_extract_utils import get_cov, create_covs_dict, make_mock_input
 
 import h5py
 import tqdm
 import pickle
 import os
 
-from typing import List
+from typing import List, Optional
 from numpy.typing import NDArray
 
 
 def get_layer_names(
-    model: torch.nn.Module, random_seed: int = 42, eval_mode: bool = True
+    model: torch.nn.Module,
+    mock_input: Optional[torch.Tensor] = None,
+    random_seed: int = 42,
+    eval_mode: bool = True,
 ) -> List[str]:
     """
     Retrieves the names of all layers in a DNN model, visible to TorchLens under torch.inference_mode().
@@ -33,7 +36,9 @@ def get_layer_names(
     all_layers : list of strings
         A list of layer names in the model.
     """
-    mock_input = torch.rand(1, 3, 224, 224)
+    if mock_input is None:
+        mock_input = make_mock_input(model)
+
     if eval_mode:
         model.eval()
 
