@@ -1,13 +1,14 @@
 import numpy as np
-from pathlib import Path
 import os
-from BayesCompare import measure_dist_parallel
-from BayesCompare.distances import measure_dist
-from BayesCompare.distances import simplify_string
-from numpy.testing import assert_allclose
-import pytest
 import h5py
 import pickle
+
+from BayesCompare import measure_dist_parallel
+from BayesCompare import measure_dist
+from BayesCompare.dist_utils import simplify_string
+
+from numpy.testing import assert_allclose
+import pytest
 
 ALL_MEASURES = [
     "wasserstein",

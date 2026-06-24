@@ -78,11 +78,15 @@ def select_measure(
 
 
 def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
-    # Check whether the folder exists
+    """
+    Checks if an HDF5 file exists. if it doesn't creates it.
+    Returns the HDF5 filename and empty indices of the distance matrix inside the HDF5 file.
+    """
     if not os.path.exists(hdf_dir):
         os.makedirs(hdf_dir)
 
     print(f"Now computing {measure_name}")
+
     # convention for the name of the distance HDF5 files is: dist_<covs_list_filename>_<measure_name>.hdf5
     measure_name = simplify_string(measure_name)
     hdf_filename = (
@@ -90,9 +94,7 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
     )
 
     if os.path.exists(hdf_filename):
-
         with h5py.File(hdf_filename, "r") as f:
-
             dist = f["dist"][...]
 
             tril_idx = np.tril_indices(dist.shape[0], k=-1)
@@ -101,11 +103,8 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
                 [int(i), int(j)]
                 for i, j in zip(tril_idx[0][nan_mask], tril_idx[1][nan_mask])
             ]
-
     else:
-
         with h5py.File(hdf_filename, "w") as f:
-
             init_mtx = np.empty((N, N))
             init_mtx[:] = np.nan
             np.fill_diagonal(init_mtx, 0)
@@ -119,17 +118,14 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
 
 
 def writer(file_dir, que, total_num_ops):
-
+    """
+    Writer worker used by the parallel distance computing function `measure_dist_parallel`
+    """
     progress_bar = tqdm.tqdm(total=int(total_num_ops))
-
     with h5py.File(file_dir, "r+") as f:
-
         res_dset = f["dist"]
-
         while 1:
-
             item = que.get()
-
             if item is None:
                 break
 
@@ -137,29 +133,27 @@ def writer(file_dir, que, total_num_ops):
             res_dset[item[1], item[0]] = item[2]
 
             f.flush()
-
             progress_bar.update(1)
 
 
 def load_covs(full_filename):
-
+    """
+    Function that loads covariances from the .npy or .pickle files
+    """
     _, ext = os.path.splitext(full_filename)
-
     pckl_exts = {".pkl", ".pickle"}
     numpy_exts = {".np", ".npy", ".npz"}
 
     if ext in pckl_exts:
-
         filename_ext = os.path.basename(full_filename)
         filename, ext = os.path.splitext(filename_ext)
 
         with open(full_filename, "rb") as f:
-            covs_names = pickle.load(f)
+            covs_loaded = pickle.load(f)
 
-        if isinstance(covs_names, list) and isinstance(covs_names[0], dict):
+        if isinstance(covs_loaded, list) and isinstance(covs_loaded[0], dict):
             covs = []
-
-            for cov_dict in covs_names:
+            for cov_dict in covs_loaded:
                 covs.append(list(cov_dict.values()))
 
             covs = np.stack(covs)
@@ -167,11 +161,10 @@ def load_covs(full_filename):
                 covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3]
             )
 
-        if isinstance(covs_names, np.ndarray):
-            covs = covs_names
+        elif isinstance(covs_loaded, np.ndarray):
+            covs = covs_loaded
 
     elif ext in numpy_exts:
-
         filename_ext = os.path.basename(full_filename)
         filename, ext = os.path.splitext(filename_ext)
 

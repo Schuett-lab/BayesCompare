@@ -77,7 +77,7 @@ def tmp_out(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 1. Obtaining correct layer names  —  get_layer_names
+# 0. Obtaining correct layer names  —  get_layer_names
 # ---------------------------------------------------------------------------
 
 
