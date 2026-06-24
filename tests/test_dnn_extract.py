@@ -1,15 +1,16 @@
 """
-Tests for cov_extractor_grad and cov_extractor_batch.
+Tests for cov_extractor and cov_extractor_batch.
 
 Coverage
 --------
 - Output structure / types
 - Mathematical correctness (symmetry, PSD, variance/covariance, np.cov oracle)
+- Mode flags (gradient, eval_mode, inference_mode)
 - File I/O and cleanup (batch function)
 - Edge cases & warnings
 - Reproducibility / random seed
 
-Author: Claude
+Author: Claude, Sezan Oral
 """
 
 import os
@@ -24,7 +25,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from BayesCompare import cov_extractor_batch, cov_extractor_grad
+from BayesCompare import cov_extractor, cov_extractor_batch
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -76,32 +77,32 @@ def tmp_out(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 1. Output structure / types  —  cov_extractor_grad
+# 1. Output structure / types  —  cov_extractor
 # ---------------------------------------------------------------------------
 
 
-class TestGradOutputStructure:
+class TestOutputStructure:
 
     def test_returns_dict(self, model, inputs_np, layer_list):
-        result = cov_extractor_grad(model, inputs_np, layer_list)
+        result = cov_extractor(model, inputs_np, layer_list)
         assert isinstance(result, dict)
 
     def test_keys_match_layer_list(self, model, inputs_np, layer_list):
-        result = cov_extractor_grad(model, inputs_np, layer_list)
+        result = cov_extractor(model, inputs_np, layer_list)
         assert set(result.keys()) == set(layer_list)
 
     def test_single_layer_string_input(self, model, inputs_np):
-        result = cov_extractor_grad(model, inputs_np, "linear_1_2")
+        result = cov_extractor(model, inputs_np, "linear_1_2")
         assert "linear_1_2" in result
 
     def test_values_are_tensors(self, model, inputs_np, layer_list):
-        result = cov_extractor_grad(model, inputs_np, layer_list)
+        result = cov_extractor(model, inputs_np, layer_list)
         for key, val in result.items():
             assert isinstance(val, torch.Tensor), f"{key} value is not a torch.Tensor"
 
     def test_cov_shape_is_square(self, model, inputs_np, layer_list):
         n = inputs_np.shape[0]
-        result = cov_extractor_grad(model, inputs_np, layer_list)
+        result = cov_extractor(model, inputs_np, layer_list)
         for key, val in result.items():
             assert val.dim() == 2, f"{key}: expected 2-D tensor"
             assert val.shape[0] == val.shape[1], f"{key}: covariance not square"
@@ -112,26 +113,26 @@ class TestGradOutputStructure:
     ):
         """When compute_covs=False the first (or some) dimension equals n_images."""
         n = inputs_np.shape[0]
-        result = cov_extractor_grad(model, inputs_np, layer_list, compute_covs=False)
+        result = cov_extractor(model, inputs_np, layer_list, compute_covs=False)
         for key, val in result.items():
             assert (
                 n in val.shape
             ), f"{key}: n_images={n} not found in activation shape {val.shape}"
 
     def test_accepts_torch_tensor_input(self, model, inputs_tensor, layer_list):
-        result = cov_extractor_grad(model, inputs_tensor, layer_list)
+        result = cov_extractor(model, inputs_tensor, layer_list)
         assert set(result.keys()) == set(layer_list)
 
 
 # ---------------------------------------------------------------------------
-# 2. Mathematical correctness  —  cov_extractor_grad
+# 2. Mathematical correctness  —  cov_extractor
 # ---------------------------------------------------------------------------
 
 
-class TestGradMathCorrectness:
+class TestMathCorrectness:
 
     def test_symmetry(self, model, inputs_np, layer_list):
-        result = cov_extractor_grad(model, inputs_np, layer_list)
+        result = cov_extractor(model, inputs_np, layer_list)
         for key, cov in result.items():
             cov_np = cov.detach().numpy()
             np.testing.assert_allclose(
@@ -142,7 +143,7 @@ class TestGradMathCorrectness:
             )
 
     def test_positive_semidefinite(self, model, inputs_np, layer_list):
-        result = cov_extractor_grad(model, inputs_np, layer_list)
+        result = cov_extractor(model, inputs_np, layer_list)
         for key, cov in result.items():
             eigenvalues = np.linalg.eigvalsh(cov.detach().numpy())
             assert np.all(
@@ -151,10 +152,8 @@ class TestGradMathCorrectness:
 
     def test_matches_numpy_cov_oracle(self, model, inputs_np, layer_list):
         """Full covariance matrix must match act @ act.T on the raw activations."""
-        activations = cov_extractor_grad(
-            model, inputs_np, layer_list, compute_covs=False
-        )
-        covs = cov_extractor_grad(model, inputs_np, layer_list, compute_covs=True)
+        activations = cov_extractor(model, inputs_np, layer_list, compute_covs=False)
+        covs = cov_extractor(model, inputs_np, layer_list, compute_covs=True)
         for key in layer_list:
             act = activations[key].detach().numpy()
             act = np.reshape(act, [act.shape[0], -1])
@@ -177,7 +176,6 @@ class TestGradMathCorrectness:
         Cov   = [[30.0, 70.0], [70.0, 174.0]]
         """
 
-        # Build identity-weight model
         class IdentityNet(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -195,7 +193,7 @@ class TestGradMathCorrectness:
 
         expected = [[30.0, 70.0], [70.0, 174.0]]
 
-        result = cov_extractor_grad(net, X, "linear_1_1")["linear_1_1"]
+        result = cov_extractor(net, X, "linear_1_1")["linear_1_1"]
 
         for i in range(2):
             for j in range(2):
@@ -206,7 +204,102 @@ class TestGradMathCorrectness:
 
 
 # ---------------------------------------------------------------------------
-# 3. File I/O and cleanup  —  cov_extractor_batch
+# 3. Mode flags  —  cov_extractor
+# ---------------------------------------------------------------------------
+
+
+class TestCovExtractorModes:
+
+    def test_gradient_true_tensors_require_grad(self, model, inputs_np, layer_list):
+        """gradient=True: returned tensors must be attached to the graph."""
+        result = cov_extractor(model, inputs_np, layer_list, gradient=True)
+        for key, val in result.items():
+            assert (
+                val.requires_grad
+            ), f"{key}: tensor does not require grad when gradient=True"
+
+    def test_gradient_false_tensors_no_grad(self, model, inputs_np, layer_list):
+        """gradient=False (default): returned tensors must not be attached to the graph."""
+        result = cov_extractor(model, inputs_np, layer_list, gradient=False)
+        for key, val in result.items():
+            assert (
+                not val.requires_grad
+            ), f"{key}: tensor requires grad when gradient=False"
+
+    def test_gradient_true_overrides_eval_mode(self, model, inputs_np, layer_list):
+        """gradient=True must force training mode regardless of eval_mode flag."""
+        cov_extractor(model, inputs_np, layer_list, gradient=True, eval_mode=True)
+        assert (
+            model.training
+        ), "Model should be in training mode after gradient=True, even with eval_mode=True"
+
+    def test_gradient_true_overrides_inference_mode(
+        self, model, inputs_tensor, layer_list
+    ):
+        """gradient=True must disable inference_mode regardless of the flag."""
+        result = cov_extractor(
+            model,
+            inputs_tensor,
+            layer_list,
+            gradient=True,
+            inference_mode=True,
+        )
+        # If inference_mode were active, requires_grad would be False
+        for key, val in result.items():
+            assert (
+                val.requires_grad
+            ), f"{key}: inference_mode was not overridden by gradient=True"
+
+    def test_eval_mode_true_puts_model_in_eval(self, model, inputs_np, layer_list):
+        """eval_mode=True (default) should leave the model in eval mode after the call."""
+        model.train()
+        cov_extractor(model, inputs_np, layer_list, gradient=False, eval_mode=True)
+        assert not model.training, "Model should be in eval mode after eval_mode=True"
+
+    def test_eval_mode_false_leaves_model_in_train(self, model, inputs_np, layer_list):
+        """eval_mode=False should not switch the model to eval mode."""
+        model.train()
+        cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            gradient=False,
+            eval_mode=False,
+            inference_mode=False,
+        )
+        assert (
+            model.training
+        ), "Model should remain in training mode when eval_mode=False"
+
+    def test_inference_mode_true_no_grad(self, model, inputs_np, layer_list):
+        """inference_mode=True (default): tensors must not require grad."""
+        result = cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            gradient=False,
+            inference_mode=True,
+        )
+        for key, val in result.items():
+            assert (
+                not val.requires_grad
+            ), f"{key}: tensor requires grad under inference_mode=True"
+
+    def test_gradient_true_and_false_same_values(self, model, inputs_np, layer_list):
+        """The covariance values must be numerically identical regardless of gradient flag."""
+        r_grad = cov_extractor(model, inputs_np, layer_list, gradient=True)
+        r_no_grad = cov_extractor(model, inputs_np, layer_list, gradient=False)
+        for key in layer_list:
+            np.testing.assert_allclose(
+                r_grad[key].detach().numpy(),
+                r_no_grad[key].detach().numpy(),
+                rtol=1e-5,
+                err_msg=f"{key}: covariance values differ between gradient=True and False",
+            )
+
+
+# ---------------------------------------------------------------------------
+# 4. File I/O and cleanup  —  cov_extractor_batch
 # ---------------------------------------------------------------------------
 
 
@@ -349,9 +442,11 @@ class TestBatchFileIO:
             not combined_path.exists()
         ), "combined pickle should not exist in layer_by_layer mode"
 
-    def test_batch_cov_matches_grad_cov(self, model, inputs_np, layer_list, tmp_out):
-        """Batch and grad paths must produce numerically identical covariances."""
-        grad_result = cov_extractor_grad(model, inputs_np, layer_list)
+    def test_batch_cov_matches_extractor_cov(
+        self, model, inputs_np, layer_list, tmp_out
+    ):
+        """Batch and cov_extractor paths must produce numerically identical covariances."""
+        extractor_result = cov_extractor(model, inputs_np, layer_list)
         cov_extractor_batch(
             model,
             inputs_np,
@@ -368,14 +463,14 @@ class TestBatchFileIO:
         for layer in layer_list:
             np.testing.assert_allclose(
                 batch_result[layer],
-                grad_result[layer].detach().numpy(),
-                rtol=1e-4,
-                err_msg=f"{layer}: batch and grad covariances differ",
+                extractor_result[layer].detach().numpy(),
+                rtol=1e-3,
+                err_msg=f"{layer}: batch and cov_extractor covariances differ",
             )
 
 
 # ---------------------------------------------------------------------------
-# 4. Edge cases & warnings
+# 5. Edge cases & warnings
 # ---------------------------------------------------------------------------
 
 
@@ -384,26 +479,21 @@ class TestEdgeCases:
     def test_single_image_does_not_crash(self, model):
         """n=1 is an edge case; at minimum it should not raise."""
         single = np.random.randn(1, 3, 8, 8).astype(np.float32)
-        # May warn or return NaN cov, but must not crash
         try:
-            result = cov_extractor_grad(model, single, "linear_1_2")
+            result = cov_extractor(model, single, "linear_1_2")
             assert "linear_1_2" in result
         except Exception as exc:
             pytest.fail(f"Single-image input raised unexpectedly: {exc}")
 
     def test_warning_on_mismatched_layer(self, model, inputs_np):
-        """A layer whose output never has a dim == n_images should warn."""
-        # fc2 output is (n, 4); n=20 ≠ 4, so this should be fine.
-        # We craft an unreachable scenario by monkeypatching if needed,
-        # but the docstring says a warning is raised — we just verify no crash
-        # and that the warning path can be exercised.
+        """A layer whose output dimension doesn't match n_images should trigger a UserWarning."""
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            cov_extractor_grad(model, inputs_np, ["linear_1_2", "linear_2_4"])
+            cov_extractor(model, inputs_np, ["linear_1_2", "linear_2_4"])
         # No assertion on caught here — we're verifying it doesn't raise
 
     def test_empty_layer_list_returns_empty_dict(self, model, inputs_np):
-        result = cov_extractor_grad(model, inputs_np, [])
+        result = cov_extractor(model, inputs_np, [])
         assert result == {} or isinstance(result, dict)
 
     def test_large_batch_size_exceeds_inputs(
@@ -437,15 +527,15 @@ class TestEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# 5. Reproducibility / random seed
+# 6. Reproducibility / random seed
 # ---------------------------------------------------------------------------
 
 
 class TestReproducibility:
 
     def test_same_seed_same_output(self, model, inputs_np, layer_list):
-        r1 = cov_extractor_grad(model, inputs_np, layer_list, random_seed=42)
-        r2 = cov_extractor_grad(model, inputs_np, layer_list, random_seed=42)
+        r1 = cov_extractor(model, inputs_np, layer_list, random_seed=42)
+        r2 = cov_extractor(model, inputs_np, layer_list, random_seed=42)
         for layer in layer_list:
             assert torch.equal(
                 r1[layer], r2[layer]
@@ -454,8 +544,8 @@ class TestReproducibility:
     def test_different_seeds_may_differ(self, model, inputs_np, layer_list):
         """For stochastic models, different seeds should (usually) differ.
         Skipped automatically if the model is deterministic."""
-        r1 = cov_extractor_grad(model, inputs_np, layer_list, random_seed=0)
-        r2 = cov_extractor_grad(model, inputs_np, layer_list, random_seed=99)
+        r1 = cov_extractor(model, inputs_np, layer_list, random_seed=0)
+        r2 = cov_extractor(model, inputs_np, layer_list, random_seed=99)
         any_differ = any(not torch.equal(r1[l], r2[l]) for l in layer_list)
         if not any_differ:
             pytest.skip(

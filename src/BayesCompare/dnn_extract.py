@@ -46,15 +46,22 @@ def get_layer_names(
     return all_layer_names
 
 
-def cov_extractor_grad(
+def cov_extractor(
     model: torch.nn.Module,
     inputs: NDArray | torch.Tensor,
     layer_list: str | List[str],
     random_seed: int = 42,
     compute_covs: bool = True,
+    gradient: bool = False,
+    eval_mode: bool = True,
+    inference_mode: bool = True,
 ) -> dict:
     """
-    Extracts covariance matrices from specified layers of a DNN model given input data.
+    Extracts covariance matrices from specified layers of a DNN model given input data, keeping the acts/covs connected to the graph.
+
+    Depending on the configuration flags, the function can either:
+    - run the model with gradients enabled (for further backpropagation), or
+    - run it in evaluation / inference mode without tracking gradients.
 
     Parameters
     ----------
@@ -67,13 +74,24 @@ def cov_extractor_grad(
     random_seed : int, default 42
         Fixed RNG seed for reproducibility with stochastic models.
     compute_covs : bool, default True
-        Flag for specifiying whether to get covariance (True) or activations (False) from the model.
-        Defaults to True, meaning that covariances will be returned.
+        If True, compute and return covariance matrices of the saved layer
+        outputs. If False, return the raw activations instead.
+    gradient : bool, default False
+        If True, run the model in a gradient‑enabled setting. Obtained activations/covariances are attached to the graph
+        for further backpropagation. This forces `eval_mode=False` and `inference_mode=False` regardless of their input values.
+        If False, the function uses `eval_mode` and `inference_mode` as provided.
+    eval_mode : bool, default True
+        Whether to put the model into evaluation mode via `model.eval()`. This argument is ignored (internally forced to False) when
+        `gradient=True`.
+    inference_mode : bool, defalt True
+        Whether to run the forward pass inside `torch.inference_mode()` for improved performance and disabled gradient tracking.
+        This argument is ignored (internally forced to False) when `gradient=True`.
 
     Returns
     -------
     covs : dict
-        A dictionary where keys are layer names and values are the corresponding covariance/activation matrices.
+        A dictionary where keys are layer names and values are the corresponding covariance matrices (if `compute_covs=True`)
+        or activations (if `compute_covs=False`).
 
     Raises
     ------
@@ -83,27 +101,44 @@ def cov_extractor_grad(
     if type(layer_list) == str:
         layer_list = [layer_list]
 
+    if isinstance(inputs, np.ndarray):
+        inputs = torch.from_numpy(inputs)
+
+    if gradient:
+        eval_mode = False
+        inference_mode = False
+        backward_ready = True
+    else:
+        backward_ready = False
+
+    if eval_mode:
+        model.eval()
+
     N = inputs.shape[0]
     postfunc = partial(get_cov, N=N) if compute_covs else None
 
     if compute_covs:
-        trace = tl.trace(
-            model,
-            inputs,
-            layers_to_save=layer_list,
-            out_transform=postfunc,
-            random_seed=random_seed,
-            backward_ready="True",
-            save_raw_outs="False",
-        )
+        out_transform = postfunc
+        save_raw_outs = False
     else:
-        trace = tl.trace(
-            model,
-            inputs,
-            layers_to_save=layer_list,
-            random_seed=random_seed,
-            backward_ready="True",
-        )
+        out_transform = None
+        save_raw_outs = True
+
+    trace_kwargs = dict(
+        model=model,
+        input_args=inputs,
+        layers_to_save=layer_list,
+        out_transform=out_transform,
+        random_seed=random_seed,
+        backward_ready=backward_ready,
+        save_raw_outs=save_raw_outs,
+    )
+
+    if inference_mode:
+        with torch.inference_mode():
+            trace = tl.trace(**trace_kwargs)
+    else:
+        trace = tl.trace(**trace_kwargs)
 
     return create_covs_dict(trace, layer_list, compute_covs)
 
