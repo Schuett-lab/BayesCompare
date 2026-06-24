@@ -6,14 +6,12 @@ Authors: Sezan Oral, Heiko Schütt
 
 import numpy as np
 import torch
-import tqdm
 import scipy.linalg
 from scipy.linalg.blas import dtrmm as mm
 from scipy.linalg import cho_factor, cho_solve
 
-from typing import Sequence, Optional, Callable
+from typing import Optional
 from numpy.typing import NDArray
-from types import ModuleType
 
 from .others import (
     _cka_np,
@@ -37,15 +35,11 @@ from .others import (
     _normalized_bures_similarity_np,
     _normalized_bures_similarity_torch,
 )
-from .cov_utils import (
-    cov_trace_norm_sigma_N,
-    check_cov_symmetry,
-    check_and_change_input_format,
-    check_input_format,
-    trace_norm_N,
-    cov_sigma_N,
+
+from .dist_utils import (
+    check_small_negative,
+    check_array,
 )
-from .dist_utils import simplify_string, check_small_negative, check_array
 
 ### Metrics
 
@@ -583,192 +577,6 @@ def _bhattacharyya_torch(
     d = (1 / 8) * means_term + (1 / 2) * log_term
     d = check_small_negative(d)
     return check_array(d)
-
-
-## Distance function caller
-
-
-## no check points, no parallelization, single measure only
-def measure_dist(
-    covs: NDArray | torch.Tensor | Sequence[NDArray | torch.Tensor],
-    mean: Optional[NDArray | torch.Tensor | Sequence[int]] = None,
-    meas_name: str = "TVD",
-    noise_var: Optional[float] = None,
-    b: float = 0.0,
-    normalize: bool = True,
-    samples_jsd_tvd: int = 10000,
-    lmbd: Optional[float] = None,
-    k: Optional[int] = None,
-    generator: Optional[np.random.Generator | torch.Generator] = None,
-    show_progress: bool = True,
-) -> NDArray | torch.Tensor:
-    """
-    Compute a symmetric pairwise distance matrix from the list of covariance matrices and optionally mean vectors.
-
-    It expects covariances matrices to be symmetric and positive semi-definite.
-    It trace-normalizes the covariance matrices to have trace equals to N (dimension of the square matrix) by default and
-    converts covariance arrays into a list of square matrices.
-
-    Parameters
-    ----------
-    covs : NDArray or torch.Tensor or a list/tuple of either of these types
-        A NumPy array or PyTorch tensor with shape (N, dim, dim) or a list/tuple of N matrices with shape (dim, dim).
-    mean : array-like, optional
-        Mean vactor of shape (N, dim).
-    meas_name : str, optional
-        Name of the distance/divergence measure to use. This name is resolved via `select_measure(meas_name)`. Default is "TVD".
-    noise_var : float, optional
-        Additive noise variance to be added to the covariance matrices.
-        If None, and a `b` value is provided, then noise_var is computed from the number of images (dim)
-        used to obtain the cov matrix and the parameter `b` using the formula
-        noise_var = (dim * b) / (1 + (dim * b)).
-        It overwrites b if both is provided. Default is None.
-    b : float, optional
-        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.
-    normalize : bool, optional
-        Flag for selecting to apply trace normalization or not. Defaults to True (normalization is applied by default).
-    samples_jsd_tvd : integer, optional
-        Number of samples used for computing JSD and TVD measures. Defaults to 10000.
-    generator: np.random.Generator or torch.Generator, optional
-        A Generator object for the randomization for generating samples for JSD and TVD computations. Default is None.
-    show_progress : bool, optional
-        Boolean to turn the tqdm progress bars on (True) or off (False). Default is on (True).
-
-    Returns
-    -------
-    dist : numpy.ndarray or torch.Tensor
-        A symmetric 2-D array of shape (N, N) containing pairwise distances covariance inputs.
-        The diagonal elements are zero.
-        Only the upper triangle (j > i) is computed explicitly and mirrored to the
-        lower triangle.
-
-    Examples
-    --------
-    >>> # Given a list of covariance matrices `cov_list`
-    >>> dist_matrix = measure_dist(cov_list, meas_name="TVD")
-    """
-    # normalize and add noise
-    if normalize and (b != 0 or noise_var):
-        if noise_var == None:  # if noise_var was not given but b is given
-            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
-            noise_var = dim * b / (1 + (dim * b))
-
-        covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
-
-    # normalize but don't add noise
-    elif normalize and not (b) and not (noise_var):
-        covs = trace_norm_N(covs)
-
-    # don't normalize but add noise
-    elif not (normalize) and (b != 0 or noise_var):
-        if noise_var == None:  # if noise_var was not given but b is given
-            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
-            noise_var = dim * b / (1 + (dim * b))
-
-        covs = cov_sigma_N(covs, noise_var=noise_var)
-
-    covs, N, module = check_and_change_input_format(covs)
-
-    idx = np.random.randint(len(covs))
-    symmetric = check_cov_symmetry(covs[idx])
-    if not symmetric:
-        raise ValueError(
-            f"Covariance matrices should be symmetric! The covariance matrix at index {idx} violates this condition."
-        )
-
-    meas_name = simplify_string(meas_name)
-    measure = select_measure(covs[0], meas_name, module=module)
-
-    dist = module.zeros((N, N))
-
-    progress_bar = tqdm.tqdm(total=int((N * (N - 1)) / 2), disable=not show_progress)
-
-    for i, ci in enumerate(covs):
-        for j, cj in enumerate(covs):
-            if j > i:
-                if "tvd" in meas_name or "jsd" in meas_name:
-                    dist[i, j] = measure(
-                        ci, cj, num_samples=samples_jsd_tvd, gen=generator
-                    )  # not using mean, for a generalized code mean should be provided
-                elif "gulp" in meas_name:
-                    dist[i, j] = measure(ci, cj, lmbd=lmbd)
-                elif "jaccard" in meas_name:
-                    dist[i, j] = measure(ci, cj, k=k)
-                else:
-                    dist[i, j] = measure(
-                        ci, cj
-                    )  # not using mean, for a generalized code mean should be provided
-
-                dist[j, i] = dist[i, j]
-                progress_bar.update(1)
-
-    return dist
-
-
-## Helper functions
-
-
-def select_measure(
-    cov_mtx: NDArray | torch.Tensor, meas_name: str, module: Optional[ModuleType] = None
-) -> Callable:
-    """
-    Select and return the appropriate distance measure function based on input covariances and measure name.
-
-    Selects a distance/similarity measure function that is compatible with
-    the given covariance matrix type (NumPy array or PyTorch tensor) and the specified
-    metric name.
-
-    Parameters
-    ----------
-    cov_mtx : np.ndarray or torch.Tensor
-        The covariance matrix for which to select a measure. Used to infer the module
-        type if not explicitly provided, and to determine device placement (CPU/GPU)
-        for PyTorch tensors.
-    meas_name : str
-        The name of the distance measure to use. Case-insensitive. Supported measures are listed in `DISTANCES` dictionary below.
-    module : {np, torch}, optional
-        The module type indicating whether to use NumPy or PyTorch implementations.
-        If None (default), the module type is inferred from cov_mtx using check_input_format.
-
-    Returns
-    -------
-    measure : callable
-        A function that computes the selected distance measure between two covariance
-        matrices. For stochastic measures (TVD, JSD), returns a functools.partial object
-        with the appropriate random generator pre-configured.
-
-    Raises
-    ------
-    NotImplementedError
-        If the metric name is not valid for the given module type, or if the covariance
-        matrix is neither a NumPy array nor a PyTorch tensor.
-    """
-
-    if module == None:
-        module = check_input_format(cov_mtx)
-
-    meas_name = simplify_string(meas_name)
-
-    if module == np:
-        try:
-            measure = REGISTRY["numpy"][meas_name]
-        except KeyError:
-            raise NotImplementedError(
-                "Given metric name is not valid for Numpy array covariances."
-            )
-    elif module == torch:
-        try:
-            measure = REGISTRY["torch"][meas_name]
-        except KeyError:
-            raise NotImplementedError(
-                "Given metric name is not valid for Tensor tensor covariances."
-            )
-    else:
-        raise NotImplementedError(
-            "Covariance matrices must be either a torch tensor or a numpy array."
-        )
-
-    return measure
 
 
 DISTANCES = {

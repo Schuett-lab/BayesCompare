@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from BayesCompare import distances
+from BayesCompare import measure_dist
 from numpy.testing import assert_allclose
 from torch.testing import assert_close
 import pytest
@@ -18,7 +19,7 @@ ALL_MEASURES = [
 # number of samples for computing jsd and tvd distances.
 # can also be set separate for each test or globally from here
 # highly affects how long the tests take
-NUM_SAMPLES = 100000
+NUM_SAMPLES = 10000
 
 
 def generate_covs(
@@ -114,7 +115,7 @@ def test_same_input(inputs, meas_name):
     num_samples = NUM_SAMPLES
 
     output_np.append(
-        distances.measure_dist(
+        measure_dist(
             [inputs["test_same_input_data"][0], inputs["test_same_input_data"][0]],
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
@@ -123,7 +124,7 @@ def test_same_input(inputs, meas_name):
         )
     )
     output_th.append(
-        distances.measure_dist(
+        measure_dist(
             [
                 torch.from_numpy(inputs["test_same_input_data"][0]),
                 torch.from_numpy(inputs["test_same_input_data"][0]),
@@ -157,7 +158,7 @@ def test_similar_input(inputs, meas_name):
 
     for pair in inputs["test_close_input_data"]:
         output_np.append(
-            distances.measure_dist(
+            measure_dist(
                 pair,
                 meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
@@ -166,7 +167,7 @@ def test_similar_input(inputs, meas_name):
             )
         )
         output_th.append(
-            distances.measure_dist(
+            measure_dist(
                 [torch.from_numpy(pair[0]), torch.from_numpy(pair[1])],
                 meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
@@ -204,7 +205,7 @@ def test_symmetric_inputs(inputs, meas_name):
     for pair in inputs["test_symmetric_inputs_data"]:
 
         output_np.append(
-            distances.measure_dist(
+            measure_dist(
                 [pair[0], pair[1]],
                 meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
@@ -214,7 +215,7 @@ def test_symmetric_inputs(inputs, meas_name):
         )
 
         output_th.append(
-            distances.measure_dist(
+            measure_dist(
                 [torch.from_numpy(pair[0]), torch.from_numpy(pair[1])],
                 meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
@@ -251,7 +252,7 @@ def test_psd_input(inputs, meas_name):
     num_samples = NUM_SAMPLES
 
     output_np.append(
-        distances.measure_dist(
+        measure_dist(
             inputs["test_psd_input_data"],
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
@@ -261,7 +262,7 @@ def test_psd_input(inputs, meas_name):
         )
     )
     output_th.append(
-        distances.measure_dist(
+        measure_dist(
             [torch.from_numpy(A) for A in inputs["test_psd_input_data"]],
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
@@ -293,7 +294,7 @@ def test_almost_psd_input(inputs, meas_name):
     num_samples = NUM_SAMPLES
 
     output_np.append(
-        distances.measure_dist(
+        measure_dist(
             inputs["test_almost_psd_input_data"],
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
@@ -303,7 +304,7 @@ def test_almost_psd_input(inputs, meas_name):
         )
     )
     output_th.append(
-        distances.measure_dist(
+        measure_dist(
             [torch.from_numpy(A) for A in inputs["test_almost_psd_input_data"]],
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
@@ -335,7 +336,7 @@ def test_large_scale_inputs(inputs, meas_name):
     num_samples = NUM_SAMPLES
 
     output_np.append(
-        distances.measure_dist(
+        measure_dist(
             inputs["test_large_input_data"],
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
@@ -345,7 +346,7 @@ def test_large_scale_inputs(inputs, meas_name):
         )
     )
     output_th.append(
-        distances.measure_dist(
+        measure_dist(
             [torch.from_numpy(A) for A in inputs["test_large_input_data"]],
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
@@ -376,7 +377,7 @@ def test_small_scale_inputs(inputs, meas_name):
     num_samples = NUM_SAMPLES
 
     output_np.append(
-        distances.measure_dist(
+        measure_dist(
             inputs["test_small_input_data"],
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
@@ -386,7 +387,7 @@ def test_small_scale_inputs(inputs, meas_name):
         )
     )
     output_th.append(
-        distances.measure_dist(
+        measure_dist(
             [torch.from_numpy(A) for A in inputs["test_small_input_data"]],
             meas_name=meas_name,
             samples_jsd_tvd=num_samples,
@@ -419,7 +420,7 @@ def test_large_and_small_scale_inputs(inputs, meas_name):
     for pair in inputs["test_large_and_small_input"]:
 
         output_np.append(
-            distances.measure_dist(
+            measure_dist(
                 pair,
                 meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
@@ -429,7 +430,7 @@ def test_large_and_small_scale_inputs(inputs, meas_name):
             )
         )
         output_th.append(
-            distances.measure_dist(
+            measure_dist(
                 [torch.from_numpy(pair[0]), torch.from_numpy(pair[1])],
                 meas_name=meas_name,
                 samples_jsd_tvd=num_samples,
@@ -458,7 +459,7 @@ def test_same_input_twice_determinism(inputs, meas_name):
 
     pair = inputs["test_symmetric_inputs_data"][0]
 
-    output_1_np = distances.measure_dist(
+    output_1_np = measure_dist(
         [pair[0], pair[1]],
         meas_name=meas_name,
         samples_jsd_tvd=num_samples,
@@ -466,7 +467,7 @@ def test_same_input_twice_determinism(inputs, meas_name):
         generator=np.random.Generator(np.random.SFC64(124)),
     )
 
-    output_2_np = distances.measure_dist(
+    output_2_np = measure_dist(
         [pair[0], pair[1]],
         meas_name=meas_name,
         samples_jsd_tvd=num_samples,
@@ -474,7 +475,7 @@ def test_same_input_twice_determinism(inputs, meas_name):
         generator=np.random.Generator(np.random.SFC64(124)),
     )
 
-    output_1_th = distances.measure_dist(
+    output_1_th = measure_dist(
         [torch.from_numpy(pair[0]), torch.from_numpy(pair[1])],
         meas_name=meas_name,
         samples_jsd_tvd=num_samples,
@@ -482,7 +483,7 @@ def test_same_input_twice_determinism(inputs, meas_name):
         generator=torch.Generator(device="cpu").manual_seed(124),
     )
 
-    output_2_th = distances.measure_dist(
+    output_2_th = measure_dist(
         [torch.from_numpy(pair[0]), torch.from_numpy(pair[1])],
         meas_name=meas_name,
         samples_jsd_tvd=num_samples,
