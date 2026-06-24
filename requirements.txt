@@ -1,5 +1,5 @@
 torchvision>=0.15.2
-torch>=2.7.0
+torch>=2.1.0
 torchlens==2.18.0
 scipy>=1.13
 numpy>=1.26

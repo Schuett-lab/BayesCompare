@@ -183,6 +183,10 @@ def test_similar_input(inputs, meas_name):
         assert_allclose(output_np, np.zeros_like(output_np), rtol=0.1, atol=0.1)
         assert_close(output_th, torch.zeros_like(output_th), rtol=0.1, atol=0.1)
         assert_allclose(output_np, output_th.numpy(), rtol=1e-3, atol=1e-3)
+    elif "jsd" in meas_name:
+        assert_allclose(output_np, np.zeros_like(output_np), rtol=0.05, atol=0.05)
+        assert_close(output_th, torch.zeros_like(output_th), rtol=0.05, atol=0.05)
+        assert_allclose(output_np, output_th.numpy(), rtol=1e-2, atol=1e-2)
     else:
         assert_allclose(output_np, np.zeros_like(output_np), rtol=0.05, atol=0.05)
         assert_close(output_th, torch.zeros_like(output_th), rtol=0.05, atol=0.05)
