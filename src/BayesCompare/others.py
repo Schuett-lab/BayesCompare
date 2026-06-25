@@ -1,17 +1,22 @@
-"""other metrics"""
+"""
+Definitions of existing representational similarity measures in the literature coomputed on second moment matrix.
+Authors: Sezan Oral, Heiko Schütt
+"""
 
 import numpy as np
 import torch
 import scipy.stats as stats
+from numpy.typing import NDArray
+
 from BayesCompare.cov_utils import cov_sigma, trace_norm
 from BayesCompare.dist_utils import (
     check_small_negative,
-    check_slight_greater_than_one,
+    check_cos_output,
     check_small_negative_eigenval,
 )
 
 
-def _cka_np(K1, K2):
+def _cka_np(K1: NDArray, K2: NDArray) -> float:
     """centred kernel alignment"""
     K1_centered = double_centering_np(K1)
     K2_centered = double_centering_np(K2)
@@ -23,7 +28,7 @@ def _cka_np(K1, K2):
     )
 
 
-def _cka_torch(K1, K2):
+def _cka_torch(K1: torch.Tensor, K2: torch.Tensor) -> float:
     """centred kernel alignment"""
     K1_centered = double_centering_torch(K1)
     K2_centered = double_centering_torch(K2)
@@ -35,7 +40,7 @@ def _cka_torch(K1, K2):
     )
 
 
-def _rsa_corr_np(K1, K2):
+def _rsa_corr_np(K1: NDArray, K2: NDArray):
     """RSA with euclidean distances, correlation similarity"""
     # conversion to distances
     d1 = _cov_to_euc_dist_np(K1)
@@ -48,10 +53,10 @@ def _rsa_corr_np(K1, K2):
         / np.sqrt(np.sum(d1[idx] * d1[idx]))
         / np.sqrt(np.sum(d2[idx] * d2[idx]))
     )
-    return check_slight_greater_than_one(corr_res)
+    return check_cos_output(corr_res)
 
 
-def _rsa_corr_torch(K1, K2):
+def _rsa_corr_torch(K1: torch.Tensor, K2: torch.Tensor):
     """RSA with euclidean distances, correlation similarity"""
     # conversion to distances
     d1 = _cov_to_euc_dist_torch(K1)
@@ -66,10 +71,10 @@ def _rsa_corr_torch(K1, K2):
         / torch.sqrt(torch.sum(triu_d1 * triu_d1))
         / torch.sqrt(torch.sum(triu_d2 * triu_d2))
     )
-    return check_slight_greater_than_one(corr_res)
+    return check_cos_output(corr_res)
 
 
-def _rsa_rank_spearman_np(K1, K2):
+def _rsa_rank_spearman_np(K1: NDArray, K2: NDArray):
     """RSA with euclidean distances, Spearman's rank correlation similarity"""
     d1 = _cov_to_euc_dist_np(K1)
     d2 = _cov_to_euc_dist_np(K2)
@@ -83,7 +88,7 @@ def _rsa_rank_spearman_np(K1, K2):
     return rho_a
 
 
-def _rsa_rank_spearman_torch(K1, K2):
+def _rsa_rank_spearman_torch(K1: torch.Tensor, K2: torch.Tensor):
     """RSA with euclidean distances, Spearman's rank correlation similarity"""
     d1 = _cov_to_euc_dist_torch(K1)
     d2 = _cov_to_euc_dist_torch(K2)
@@ -99,7 +104,7 @@ def _rsa_rank_spearman_torch(K1, K2):
     return rho_a
 
 
-def _rsa_cos_np(K1, K2):
+def _rsa_cos_np(K1: NDArray, K2: NDArray):
     """RSA with euclidean distances, cosine similarity"""
     # conversion to distances
     d1 = _cov_to_euc_dist_np(K1)
@@ -110,10 +115,10 @@ def _rsa_cos_np(K1, K2):
         / np.sqrt(np.sum(d1[idx] * d1[idx]))
         / np.sqrt(np.sum(d2[idx] * d2[idx]))
     )
-    return check_slight_greater_than_one(cos_res)
+    return check_cos_output(cos_res)
 
 
-def _rsa_cos_torch(K1, K2):
+def _rsa_cos_torch(K1: torch.Tensor, K2: torch.Tensor):
     """RSA with euclidean distances, cosine similarity"""
     # conversion to distances
     d1 = _cov_to_euc_dist_torch(K1)
@@ -126,21 +131,24 @@ def _rsa_cos_torch(K1, K2):
         / torch.sqrt(torch.sum(triu_d1 * triu_d1))
         / torch.sqrt(torch.sum(triu_d2 * triu_d2))
     )
-    return check_slight_greater_than_one(cos_res)
+    return check_cos_output(cos_res)
 
 
-def _rsa_acos_np(K1, K2):
+def _rsa_acos_np(K1: NDArray, K2: NDArray):
     """RSA with euclidean distances, arc-cosine similarity"""
     return np.arccos(_rsa_cos_np(K1, K2))
 
 
-def _rsa_acos_torch(K1, K2):
+def _rsa_acos_torch(K1: torch.Tensor, K2: torch.Tensor):
     """RSA with euclidean distances, arc-cosine similarity"""
     return torch.arccos(_rsa_cos_torch(K1, K2))
 
 
-def _kernel_gulp_np(K1, K2, lmbd):
-    """Kernel-based GULP"""
+def _kernel_gulp_np(K1: NDArray, K2: NDArray, lmbd: float):
+    """
+    Kernel-based GULP
+    Based on the kernel-based formulation in Boix-Adsera et al. (2022).
+    """
     k1_normed = trace_norm(K1)
     k2_normed = trace_norm(K2)
     k1_lmbd_inv = np.linalg.inv(cov_sigma(k1_normed, noise_var=lmbd, signal_var=1))
@@ -155,8 +163,11 @@ def _kernel_gulp_np(K1, K2, lmbd):
     return d_sq**0.5
 
 
-def _kernel_gulp_torch(K1, K2, lmbd):
-    """Kernel-based GULP"""
+def _kernel_gulp_torch(K1: torch.Tensor, K2: torch.Tensor, lmbd: float):
+    """
+    Kernel-based GULP
+    Based on the kernel-based formulation in Boix-Adsera et al. (2022).
+    """
     k1_normed = trace_norm(K1)
     k2_normed = trace_norm(K2)
     k1_lmbd_inv = torch.linalg.inv(cov_sigma(k1_normed, noise_var=lmbd, signal_var=1))
@@ -171,8 +182,11 @@ def _kernel_gulp_torch(K1, K2, lmbd):
     return d_sq**0.5
 
 
-def _dist_corr_np(K1, K2):
-    """Distance Correlation"""
+def _dist_corr_np(K1: NDArray, K2: NDArray):
+    """
+    Distance Correlation
+    Based on the implementation in Klabunde et. al (2025)
+    """
     K1_centered = double_centering_np(K1)
     K2_centered = double_centering_np(K2)
 
@@ -182,8 +196,11 @@ def _dist_corr_np(K1, K2):
     )
 
 
-def _dist_corr_torch(K1, K2):
-    """Distance Correlation"""
+def _dist_corr_torch(K1: torch.Tensor, K2: torch.Tensor):
+    """
+    Distance Correlation
+    Based on the implementation in Klabunde et. al (2025)
+    """
     K1_centered = double_centering_torch(K1)
     K2_centered = double_centering_torch(K2)
 
@@ -195,8 +212,11 @@ def _dist_corr_torch(K1, K2):
     )
 
 
-def _jaccard_np(K1, K2, k):
-    """Jaccard Similarity"""
+def _jaccard_np(K1: NDArray, K2: NDArray, k: int):
+    """
+    Jaccard Similarity
+    Based on the implementation in Klabunde et. al (2025)
+    """
     d1 = _cov_to_cos_sim_np(K1)
     d2 = _cov_to_cos_sim_np(K2)
 
@@ -216,8 +236,11 @@ def _jaccard_np(K1, K2, k):
     return j.mean()
 
 
-def _jaccard_torch(K1, K2, k):
-    """Jaccard Similarity"""
+def _jaccard_torch(K1: torch.Tensor, K2: torch.Tensor, k: int):
+    """
+    Jaccard Similarity
+    Based on the implementation in Klabunde et. al (2025)
+    """
     d1 = _cov_to_cos_sim_torch(K1)
     d2 = _cov_to_cos_sim_torch(K2)
 
@@ -237,8 +260,11 @@ def _jaccard_torch(K1, K2, k):
     return j.mean()
 
 
-def _procrustes_np(K1, K2):
-
+def _procrustes_np(K1: NDArray, K2: NDArray):
+    """
+    Procrustes distance
+    Based on the formulation in Harvey, Larsen and Williams (2024).
+    """
     sigma1 = double_centering_np(K1.astype(np.float64))
     sigma2 = double_centering_np(K2.astype(np.float64))
 
@@ -252,14 +278,15 @@ def _procrustes_np(K1, K2):
     sig1_sig2_sqrt = (V_sig12 * np.sqrt(E_sig12)) @ V_sig12.T
 
     d_sq = np.trace(sigma1 + sigma2 - 2 * (sig1_sig2_sqrt))
-
     d_sq = check_small_negative(d_sq)
-
     return d_sq**0.5
 
 
-def _procrustes_torch(K1, K2):
-
+def _procrustes_torch(K1: torch.Tensor, K2: torch.Tensor):
+    """
+    Procrustes distance
+    Based on the formulation in Harvey, Larsen and Williams (2024).
+    """
     if type(K1) != torch.Tensor:
         K1 = torch.tensor(K1)
     if type(K2) != torch.Tensor:
@@ -280,13 +307,15 @@ def _procrustes_torch(K1, K2):
     sig1_sig2_sqrt = (V_sig12 * torch.sqrt(E_sig12)) @ V_sig12.T
 
     d_sq = torch.trace(sigma1 + sigma2 - 2 * (sig1_sig2_sqrt))
-
     d_sq = check_small_negative(d_sq)
-
     return d_sq**0.5
 
 
-def _normalized_bures_similarity_np(K1, K2):
+def _normalized_bures_similarity_np(K1: NDArray, K2: NDArray):
+    """
+    Normalized Bures Similarity
+    Based on the formulation in Harvey, Larsen and Williams (2024).
+    """
     sigma1 = double_centering_np(K1.astype(np.float64))
     sigma2 = double_centering_np(K2.astype(np.float64))
     sig1 = trace_norm(sigma1)
@@ -304,7 +333,11 @@ def _normalized_bures_similarity_np(K1, K2):
     return np.trace(sig1_sig2_sqrt)
 
 
-def _normalized_bures_similarity_torch(K1, K2):
+def _normalized_bures_similarity_torch(K1: torch.Tensor, K2: torch.Tensor):
+    """
+    Normalized Bures Similarity
+    Based on the formulation in Harvey, Larsen and Williams (2024).
+    """
     if type(K1) != torch.Tensor:
         K1 = torch.tensor(K1)
     if type(K2) != torch.Tensor:
@@ -332,13 +365,16 @@ def _normalized_bures_similarity_torch(K1, K2):
 ## Helper Functions
 
 
-def _dCov2(A, B) -> float:
+def _dCov2(A: NDArray | torch.Tensor, B: NDArray | torch.Tensor) -> float:
+    """
+    Computes squared sample distance covariance as given Klabunde et. al (2025)
+    """
     return (A * B).mean()
 
 
-def _cov_to_euc_dist_np(M):
+def _cov_to_euc_dist_np(M: NDArray):
     """
-    Function for obtaining squared euclidean distance from covariance matrix.
+    FComputes squared euclidean distance from covariance matrix.
     """
     diag = np.diag(M)
     d = np.expand_dims(diag, 0) + np.expand_dims(diag, 1) - 2 * M
@@ -346,9 +382,9 @@ def _cov_to_euc_dist_np(M):
     return d
 
 
-def _cov_to_euc_dist_torch(M):
+def _cov_to_euc_dist_torch(M: torch.Tensor):
     """
-    Function for obtaining squared euclidean distance from covariance matrix.
+    Computes squared euclidean distance from covariance matrix.
     """
     diag = torch.diag(M)
     d = diag.unsqueeze(0) + diag.unsqueeze(1) - 2 * M
@@ -356,9 +392,9 @@ def _cov_to_euc_dist_torch(M):
     return d
 
 
-def _cov_to_cos_sim_np(M):
+def _cov_to_cos_sim_np(M: NDArray):
     """
-    Function for obtaining cosine similarity from covariance matrix.
+    Computes cosine similarity from covariance matrix.
     """
     diag = np.diag(M)
     denom = np.sqrt(diag)[None, :] * np.sqrt(diag)[:, None]  # outer product
@@ -368,9 +404,9 @@ def _cov_to_cos_sim_np(M):
     return cos_sim
 
 
-def _cov_to_cos_sim_torch(M):
+def _cov_to_cos_sim_torch(M: torch.Tensor):
     """
-    Function for obtaining cosine similarity from covariance matrix.
+    Computes cosine similarity from covariance matrix.
     """
     diag = torch.diagonal(M)
     denom = torch.sqrt(diag)[None, :] * torch.sqrt(diag)[:, None]
@@ -380,15 +416,27 @@ def _cov_to_cos_sim_torch(M):
     return cos_sim
 
 
-def double_centering_np(M):
+def double_centering_np(M: NDArray):
+    """
+    Applies double-centering operation on covariance matrices
+    """
     return M - M.mean(axis=1, keepdims=True) - M.mean(axis=0, keepdims=True) + M.mean()
 
 
-def double_centering_torch(M):
+def double_centering_torch(M: torch.Tensor):
+    """
+    Applies double-centering operation on covariance matrices
+    """
     return M - M.mean(dim=1, keepdim=True) - M.mean(dim=0, keepdim=True) + M.mean()
 
 
-def _knn_from_dist_np(dist, k, asc_or_desc):
+def _knn_from_dist_np(
+    dist: NDArray | torch.Tensor, k: int, asc_or_desc: str
+) -> tuple[int, int]:
+    """
+    Computes the k-nearest neighbors from a distance/similarity matrix and k parameter.
+    `asc_or_desc` determines if the given matrix is a distance or a similarity matrix.
+    """
     if asc_or_desc == "asc":
         order = np.argsort(dist, axis=1)
     elif asc_or_desc == "desc":
@@ -396,7 +444,13 @@ def _knn_from_dist_np(dist, k, asc_or_desc):
     return order[:, 1 : k + 1]
 
 
-def _knn_from_dist_torch(dist, k, asc_or_desc):
+def _knn_from_dist_torch(
+    dist: NDArray | torch.Tensor, k: int, asc_or_desc: str
+) -> tuple[int, int]:
+    """
+    Computes the k-nearest neighbors from a distance/similarity matrix and k parameter.
+    `asc_or_desc` determines if the given matrix is a distance or a similarity matrix.
+    """
     if asc_or_desc == "asc":
         order = torch.argsort(dist, dim=1, descending=False)
     elif asc_or_desc == "desc":

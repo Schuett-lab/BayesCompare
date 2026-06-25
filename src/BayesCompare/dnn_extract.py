@@ -1,216 +1,461 @@
 import torch
 import numpy as np
-from typing import List, Optional, Union
-import warnings
-import torch
-from functools import partial
 import torchlens as tl
+from functools import partial
+from .dnn_extract_utils import (
+    get_cov,
+    create_covs_dict,
+    make_mock_input,
+    check_hdf_exists_save_acts,
+)
+
+import h5py
 import tqdm
+import pickle
+import os
 
-
-def check_act_dims(act, N, module_name):
-    """
-    Checks and reshapes activation tensor dimensions to ensure N is the first dimension.
-    This function verifies that the activation tensor contains a dimension equal to N, the
-    number of images used for obtaining the covariance matrix. If N is not the first dimension, the
-    tensor is permuted to move it to the first position. If N is not found in any dimension,
-    a warning is issued. If N is the first dimension, the tensor itself is returned.
-    Args:
-        act (torch.Tensor or np.ndarray): Activation tensor whose dimensions need to be checked and potentially reordered.
-        N (int): Number of images used for obtaining the covariance matrix. This dimension should exist in act.
-        module_name (str): Indicator of the activation type. It is either 'torch' or 'numpy'
-    Returns:
-        activations (torch.Tensor or None): The activation tensor with N as the first dimension, or None if N is not found
-        in any dimension of the input tensor.
-    Raises:
-        UserWarning: If N is not found in any dimension of the activation tensor.
-    """
-
-    shape = list(act.shape)
-
-    if shape[0] == N:
-        activations = act
-
-    elif N in shape:
-        n_dim = shape.index(N)  # find which dimension equals n
-        perm = [n_dim] + [i for i in range(len(shape)) if i != n_dim]
-
-        if module_name == "numpy":
-            activations = act.transpose(perm)
-        elif module_name == "torch":
-            activations = act.permute(perm)
-
-    elif N not in shape:
-        warnings.warn("This layer does not have a number of images dimension.")
-        return None
-
-    return activations
-
-
-def get_cov(activations: Union[torch.Tensor, np.ndarray], N=None):
-    """
-    Computes the covariance matrix of the given activations.
-    Args:
-        activations (torch.Tensor or np.ndarray): The activations from which to compute the covariance matrix.
-            The first dimension is assumed to be the number of images unless N is provided.
-        N (Optional[int]): The number of images used for obtaining the covariance matrix. If provided,
-            the function checks that the first dimension of activations matches N. Then, if it does not match,
-            it reorders dimensions accordingly.
-    Returns:
-        cov_matrix (torch.Tensor or np.ndarray): The computed covariance matrix of the activations.
-    Raises:
-        NotImplementedError: If activations is neither a torch tensor nor a numpy array.
-    """
-
-    if torch.is_tensor(activations):
-        module = torch
-        module_name = "torch"
-        # x = activations.detach().clone() # we dont want the covs to be detached from the graph because we would like to use them for training
-    elif isinstance(activations, np.ndarray):
-        module = np
-        module_name = "numpy"
-    else:  # Also we can catch bad arguments (not mandatory)
-        raise NotImplementedError(
-            "Activations must be either a torch tensor or a numpy array."
-        )
-
-    # check if the first dimension of activations is equal to the number of images used
-    # if the number of images is provided as an input
-    if N != None:
-        activations = check_act_dims(activations, N, module_name)
-
-    act = module.reshape(activations, [activations.shape[0], -1])
-    return module.matmul(act, act.T)
-
-
-def _compare_wanted_output(output_layers: List[str], wanted_layers: List[str]):
-    """
-    Compares the layers saved in the model history object with the
-    originally requested layers to ensure all wanted layers are included
-    and no additional layers are inserted.
-    Args:
-        output_layers (List[str]): List of layer names saved in the model history object.
-        wanted_layers (List[str]): List of originally requested layer names.
-    Returns:
-        (List[str]): Filtered list of layer names that are both in the output_layers and wanted_layers.
-    """
-    wanted_set = set(wanted_layers)
-    return [x for x in output_layers if x in wanted_set]
+from typing import List, Optional
+from numpy.typing import NDArray
 
 
 def get_layer_names(
-    model: torch.nn.Module, get_graph: Optional[str] = "none", random_seed: int = 42
-):
+    model: torch.nn.Module,
+    mock_input: Optional[torch.Tensor] = None,
+    random_seed: int = 42,
+    eval_mode: bool = True,
+) -> List[str]:
     """
     Retrieves the names of all layers in a DNN model, visible to TorchLens under torch.inference_mode().
 
-    Args:
-        model (torch.nn.Module): The DNN model from which to extract layer names.
-        get_graph (Optional[str]): Visualization option for torchlens log_forward_pass.
-            Defaults to "none". Can be "unrolled" or "rolled" to visualize the model graph.
-    Returns:
-        all_layers (List[str]): A list of layer names in the model.
-    """
+    Parameters
+    ----------
+    model : torch.nn.Module)
+        The DNN model from which to extract layer names.
+    random_seed : int, default 42
+        Fixed RNG seed for reproducibility with stochastic models.
+    eval_mode : bool, default True
+        Model activations/covariances are obtained when the model is in eval mode (by default, True).
 
-    # if model is not in eval mode, put it in eval mode
-    if model.training == True:
+    Returns
+    -------
+    all_layers : list of strings
+        A list of layer names in the model.
+    """
+    if mock_input is None:
+        mock_input = make_mock_input(model)
+
+    if eval_mode:
         model.eval()
 
     with torch.inference_mode():
-
-        mock_input = torch.rand(1, 3, 224, 224)
-
-        model_history = tl.log_forward_pass(
-            model,
-            mock_input,
-            layers_to_save=None,
-            vis_opt=get_graph,
-            detach_saved_tensors=True,
-            random_seed=random_seed,
+        all_layers_obj = tl.trace(
+            model, mock_input, layers_to_save="none", random_seed=random_seed
         )
+        all_layer_names = list(all_layers_obj.layer_dict_main_keys.keys())
 
-        all_layers = list(model_history.layer_dict_main_keys.keys())
-
-    return all_layers
+    return all_layer_names
 
 
 def cov_extractor(
     model: torch.nn.Module,
-    layer_list: Union[List[str], str],
-    inputs: Union[torch.Tensor, np.ndarray],
+    inputs: NDArray | torch.Tensor,
+    layer_list: str | List[str],
     random_seed: int = 42,
-    cov_postfunc: bool = True,
-):
+    compute_covs: bool = True,
+    gradient: bool = False,
+    eval_mode: bool = True,
+    inference_mode: bool = True,
+    flatten_acts: bool = False,
+) -> dict:
     """
-    Extracts covariance matrices from specified layers of a DNN model given input data.
+    Extracts covariance matrices from specified layers of a DNN model given input data, keeping the acts/covs connected to the graph.
 
-    Args:
-        model (torch.nn.Module): The DNN model from which to extract covariances.
-        layer_list (Union[List[str], str]): A list of layer names or a single layer name
-            for which to compute the covariance matrices.
-        inputs (Union[torch.Tensor, np.array]): An input tensor or array of images to
-            extract covariances from. First dimension is expected to be the number of images.
-        random_seed (Optional(int)): Random seed for deterministic activation/covariance extraction. Defaults to 42.
-        cov_postfunction (Optional(int): Flag for specifiying whether to get covariance (True) or activations (False) from the model. Defaults to True, meaning that covariances will be returned.
-    Returns:
-        covs (dict): A dictionary where keys are layer names and values are the corresponding
-            covariance/activation matrices.
-    Raises:
-        UserWarning: If a specified layer does not have a dimension matching the number of input images.
+    Depending on the configuration flags, the function can either:
+    - run the model with gradients enabled (for further backpropagation), or
+    - run it in evaluation / inference mode without tracking gradients.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        The DNN model from which to extract covariances.
+    inputs : numpy array or a torch tensor
+        An input tensor or array of images to extract covariances from. First dimension is expected to be the number of images.
+    layer_list : str or a list of strings
+        A single layer name or a list of layer names for which to compute the covariance matrices.
+    random_seed : int, default 42
+        Fixed RNG seed for reproducibility with stochastic models.
+    compute_covs : bool, default True
+        If True, compute and return covariance matrices of the saved layer
+        outputs. If False, return the raw activations instead.
+    gradient : bool, default False
+        If True, run the model in a gradient‑enabled setting. Obtained activations/covariances are attached to the graph
+        for further backpropagation. This forces `eval_mode=False` and `inference_mode=False` regardless of their input values.
+        If False, the function uses `eval_mode` and `inference_mode` as provided.
+    eval_mode : bool, default True
+        Whether to put the model into evaluation mode via `model.eval()`. This argument is ignored (internally forced to False) when
+        `gradient=True`.
+    inference_mode : bool, defalt True
+        Whether to run the forward pass inside `torch.inference_mode()` for improved performance and disabled gradient tracking.
+        This argument is ignored (internally forced to False) when `gradient=True`.
+    flatten_acts : bool, default False
+        When True, extracted activations are flattened to have dimensions (N, C*H*W) instead of (N, C, H, W).
+        Considered only when `compute_covs=False`.
+
+    Returns
+    -------
+    covs : dict
+        A dictionary where keys are layer names and values are the corresponding covariance matrices (if `compute_covs=True`)
+        or activations (if `compute_covs=False`).
+
+    Raises
+    ------
+    UserWarning
+        If a specified layer does not have a dimension matching the number of input images.
     """
-
     if type(layer_list) == str:
         layer_list = [layer_list]
 
-    covs = {}
+    if isinstance(inputs, np.ndarray):
+        inputs = torch.from_numpy(inputs)
 
     N = inputs.shape[0]
-    postfunc = partial(get_cov, N=N) if cov_postfunc else None
 
-    model.eval()
+    if gradient:
+        eval_mode = False
+        inference_mode = False
+        backward_ready = True
+        out_transform = partial(get_cov, N=N)
+    else:
+        backward_ready = False
+        if eval_mode or inference_mode:
+            out_transform = partial(get_cov, N=N, detach=True)
+        else:
+            out_transform = partial(get_cov, N=N)
+
+    if compute_covs:
+        save_raw_outs = False
+    else:
+        out_transform = None
+        save_raw_outs = True
+
+    if eval_mode:
+        model.eval()
+
+    trace_kwargs = dict(
+        model=model,
+        input_args=inputs,
+        layers_to_save=layer_list,
+        out_transform=out_transform,
+        random_seed=random_seed,
+        backward_ready=backward_ready,
+        save_raw_outs=save_raw_outs,
+    )
+
+    if inference_mode:
+        with torch.inference_mode():
+            trace = tl.trace(**trace_kwargs)
+    else:
+        trace = tl.trace(**trace_kwargs)
+
+    return create_covs_dict(trace, layer_list, compute_covs, flatten_acts)
+
+
+def act_extractor_batch(
+    model: torch.nn.Module,
+    inputs: NDArray | torch.Tensor,
+    layer_list: str | List[str],
+    out_filename: str,
+    out_dir: str,
+    batch_size: int = 10,
+    layer_by_layer: bool = False,
+    random_seed: int = 42,
+    eval_mode: bool = True,
+    flatten_acts: bool = False,
+):
+    """
+    Extracts and saves activations from specified layers of a DNN model given input data to the disk as HDF5 files.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        The DNN model from which to extract covariances.
+    inputs : numpy array or a torch tensor
+        An input tensor or array of images to extract covariances from. First dimension is expected to be the number of images.
+    layer_list : str or a list of strings
+        A single layer name or a list of layer names for which to compute the covariance matrices.
+    out_filename : str
+        Filename with which the activation files are saved as.
+        If layer_by_layer is `False`, activations files are saved as `activations_{out_filename}.hdf5`.
+        If layer_by_layer is `True`, activations files are saved as `activations_{out_filename}_{layer_name}.hdf5`.
+    out_dir : str
+        Directory where the output activation HDF5 files will be saved.
+    batch_size : int, default 10
+        Size of the batches that will be used to get covariances/batches.
+    layer_by_layer : bool, default False
+        Flag for indicating to compute activations layer by layer and then to save separate layer files.
+        False is for saving all layer activations into the same HDF5 file.
+    random_seed : int, default 42
+        Fixed RNG seed for reproducibility with stochastic models.
+    eval_mode : bool, default True
+        Model activations/covariances are obtained when the model is in eval mode (by default, True).
+    flatten_acts : bool, default False
+        When True, extracted activations are flattened to have dimensions (N, C*H*W) instead of (N, C, H, W).
+    """
+    if type(layer_list) == str:
+        layer_list = [layer_list]
+
+    if isinstance(inputs, np.ndarray):
+        inputs = torch.from_numpy(inputs)
+
+    if eval_mode:
+        model.eval()
 
     with torch.inference_mode():
+        if layer_by_layer:
+            layer_out_list = [
+                f"{out_dir}/activations_{out_filename}_{layer_name}.hdf5"
+                for layer_name in layer_list
+            ]
 
-        print(
-            ("Covariance" if cov_postfunc else "Activation")
-            + " computation has started. This may take a while."
-        )
+            for k, layer_name in enumerate(layer_list):
+                for batch_idx, batch in enumerate(
+                    tqdm.tqdm(
+                        torch.split(inputs, batch_size),
+                        desc=f"Batches - Activation Extraction - Layer {layer_name}",
+                        position=1,
+                    )
+                ):
+                    activations = tl.batched_extract(
+                        model=model,
+                        stimuli=batch,
+                        layers=layer_name,
+                        batch_size=batch_size,
+                    )
 
-        model_history = tl.log_forward_pass(
-            model,
-            inputs,
-            layers_to_save=layer_list[0],
-            vis_opt="none",
-            activation_postfunc=postfunc,
-            detach_saved_tensors=True,
-            random_seed=random_seed,
-        )
+                    if flatten_acts:
+                        acts = (
+                            torch.reshape(
+                                activations[layer_name],
+                                [activations[layer_name].shape[0], -1],
+                            )
+                            .detach()
+                            .cpu()
+                        )
+                    else:
+                        acts = activations[layer_name].detach().cpu()
 
-        covs[layer_list[0]] = model_history[layer_list[0]].tensor_contents
+                    check_hdf_exists_save_acts(
+                        layer_out_list[k],
+                        acts,
+                        num_inputs=inputs.shape[0],
+                        dset_name="activations",
+                        first_creation=True if batch_idx == 0 else False,
+                    )
 
-        if len(layer_list) > 1:
+                print(
+                    f"Activations for layer {layer_name} are saved at {layer_out_list[k]}."
+                )
+            print(f"All activations are saved to HDF5 files at the directory {out_dir}")
 
-            print(
-                "Model history object is created, now "
-                + ("covariances" if cov_postfunc else "activations")
-                + " for selected layers will be extracted."
-            )
+        else:
+            hdf_filename = f"{out_dir}/activations_{out_filename}.hdf5"
 
-            model_history.save_new_activations(
-                model, inputs, layers_to_save=layer_list[1:], random_seed=random_seed
-            )
-
-            if len(model_history.layers_with_saved_activations) != len(layer_list) - 1:
-
-                proper_saved_layers_list = _compare_wanted_output(
-                    model_history.layers_with_saved_activations, layer_list
+            for batch_idx, batch in enumerate(
+                tqdm.tqdm(
+                    torch.split(inputs, batch_size),
+                    desc=f"Batches - Activation Extraction - All Layers",
+                    position=1,
+                )
+            ):
+                activations = tl.batched_extract(
+                    model=model,
+                    stimuli=batch,
+                    layers=layer_list,
+                    batch_size=batch_size,
                 )
 
-                for layer in proper_saved_layers_list:
-                    covs[layer] = model_history[layer].tensor_contents
+                for layer_name in layer_list:
+                    if flatten_acts:
+                        acts = (
+                            torch.reshape(
+                                activations[layer_name],
+                                [activations[layer_name].shape[0], -1],
+                            )
+                            .detach()
+                            .cpu()
+                        )
+                    else:
+                        acts = activations[layer_name].detach().cpu()
 
-            else:
-                for layer in model_history.layers_with_saved_activations:
-                    covs[layer] = model_history[layer].tensor_contents
+                    check_hdf_exists_save_acts(
+                        hdf_filename,
+                        acts,
+                        num_inputs=inputs.shape[0],
+                        dset_name="activations_" + layer_name,
+                        first_creation=True if batch_idx == 0 else False,
+                    )
+            print(
+                f"All activations are saved to '{out_dir}/activations_{out_filename}.hdf5'"
+            )
 
-    return covs
+
+def compute_covs_from_act_files(
+    layer_list: str | List[str],
+    out_filename: str,
+    out_dir: str,
+    layer_by_layer: bool,
+    delete_act_files: bool,
+    flatten_acts: bool,
+):
+    """
+    Reads from the saved activation files, then computes and saves the covariances to the disk as pickle files.
+
+    Parameters
+    ----------
+    layer_list : str or a list of strings
+        A single layer name or a list of layer names for which to compute the covariance matrices.
+    out_filename : str
+        Filename with which the covariance files are saved as.
+        If layer_by_layer is `False`, covariance files are saved as `covs_{out_filename}.pkl`.
+        If layer_by_layer is `True`, covariance files are saved as `covs_{out_filename}_{layer_name}.pkl`.
+    out_dir : str
+        Directory where the output covariance files will be saved.
+    layer_by_layer : bool, default False
+        Flag for indicating to compute covariances layer by layer and then to save separate layer files.
+        False is for saving all layer covariances to the same pkl file as a dict where the keys are layer names.
+    delete_act_files : bool, default True
+        Flag for specifying whether to delete activation files from the disk.
+    flatten_acts : bool
+        When True, extracted activations are flattened to have dimensions (N, C*H*W) instead of (N, C, H, W).
+    """
+    if layer_by_layer:
+        layer_out_list = [
+            f"{out_dir}/activations_{out_filename}_{layer_name}.hdf5"
+            for layer_name in layer_list
+        ]
+        for k, activations_filename in enumerate(layer_out_list):
+            layer_name = layer_list[k]
+
+            with h5py.File(activations_filename) as f:
+                activations = f["activations"][...]
+
+                if flatten_acts:
+                    layer_cov = get_cov(activations)
+                else:
+                    layer_cov = get_cov(activations.reshape(activations.shape[0], -1))
+
+            cov_out_filename = f"{out_dir}/covs_{out_filename}_{layer_name}.pkl"
+            with open(cov_out_filename, "wb") as f:
+                pickle.dump(layer_cov, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+            print(f"\nSaved covariance for layer {layer_name} at {cov_out_filename}.")
+
+            if delete_act_files:
+                os.remove(activations_filename)
+                print(
+                    f"\nDeleted the activation file for layer {layer_name} at {activations_filename}."
+                )
+    else:
+        covs_dict = {}
+        for k, layer_name in enumerate(layer_list):
+            with h5py.File(f"{out_dir}/activations_{out_filename}.hdf5", "r") as f:
+                activations = f["activations_" + layer_name][...]
+
+                if flatten_acts:
+                    layer_cov = get_cov(activations)
+                else:
+                    layer_cov = get_cov(activations.reshape(activations.shape[0], -1))
+
+            covs_dict[layer_name] = layer_cov
+
+        cov_out_filename = f"{out_dir}/covs_{out_filename}.pkl"
+        with open(cov_out_filename, "wb") as f:
+            pickle.dump(covs_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        print(f"\nSaved covariance for layer {layer_name} at {cov_out_filename}.")
+
+        if delete_act_files:
+            os.remove(f"{out_dir}/activations_{out_filename}.hdf5")
+            print(
+                f"\nDeleted the activation file at {out_dir}/activations_{out_filename}.hdf5."
+            )
+
+
+def cov_extractor_batch(
+    model: torch.nn.Module,
+    inputs: NDArray | torch.Tensor,
+    layer_list: str | List[str],
+    out_filename: str,
+    out_dir: str,
+    batch_size: int = 10,
+    layer_by_layer: bool = False,
+    random_seed: int = 42,
+    compute_covs: bool = True,
+    delete_act_files: bool = True,
+    eval_mode: bool = True,
+    flatten_acts: bool = False,
+):
+    """
+    Extracts and saves covariances/activations from specified layers of a DNN model given input data to the disk as HDF5 (if activations) or pickle (if covariances) files.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        The DNN model from which to extract covariances.
+    inputs : numpy array or a torch tensor
+        An input tensor or array of images to extract covariances from. First dimension is expected to be the number of images.
+    layer_list : str or a list of strings
+        A single layer name or a list of layer names for which to compute the covariance matrices.
+    out_filename : str
+        Filename with which the covariance/activations files are saved as.
+        If layer_by_layer is `False`, activations files are saved as `activations_{out_filename}.hdf5` and covariance files are saved as `covs_{out_filename}.pkl`.
+        If layer_by_layer is `True`, activations files are saved as `activations_{out_filename}_{layer_name}.hdf5` and covariance files are saved as `covs_{out_filename}_{layer_name}.pkl`.
+    out_dir : str
+        Directory where the output covariance/activation files will be saved.
+    batch_size : int, default 10
+        Size of the batches that will be used to get covariances/batches.
+    layer_by_layer : bool, default False
+        Flag for indicating to compute covariances/activations layer by layer and then to save separate layer files.
+        False is for saving all layer activations into the same HDF5 file or all layer covariances to the same pkl file as a dict where the keys are layer names.
+    random_seed : int, default 42
+        Fixed RNG seed for reproducibility with stochastic models.
+    compute_covs : bool, default True
+        Flag for specifiying whether to get covariance (True) or activations (False) from the model.
+        Defaults to True, meaning that covariances will be saved.
+    delete_act_files : bool, default True
+        Flag for specifying whether to delete activation files from the disk.
+        Ignored when compute_covs is False (when only the activations are saved from the model).
+        When both `delete_act_files" and `compute_covs` is True, only the covariance files are saved to the disk.
+        When `delete_act_files" is False and `compute_covs` is True, both activation files and covariance files are saved to the disk.
+    eval_mode : bool, default True
+        Model activations/covariances are obtained when the model is in eval mode (by default, True).
+    flatten_acts : bool, default False
+        When True, extracted activations are flattened to have dimensions (N, C*H*W) instead of (N, C, H, W).
+        Considered only when `compute_covs=False`.
+
+    Raises:
+    ----------
+    UserWarning
+        If a specified layer does not have a dimension matching the number of input images.
+    """
+    act_extractor_batch(
+        model=model,
+        inputs=inputs,
+        layer_list=layer_list,
+        out_filename=out_filename,
+        out_dir=out_dir,
+        batch_size=batch_size,
+        layer_by_layer=layer_by_layer,
+        random_seed=random_seed,
+        eval_mode=eval_mode,
+        flatten_acts=flatten_acts,
+    )
+    if compute_covs:
+        compute_covs_from_act_files(
+            layer_list=layer_list,
+            out_filename=out_filename,
+            out_dir=out_dir,
+            layer_by_layer=layer_by_layer,
+            delete_act_files=delete_act_files,
+            flatten_acts=flatten_acts,
+        )
