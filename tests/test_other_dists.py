@@ -1,8 +1,7 @@
 import torch
 import numpy as np
-from BayesCompare.distances import measure_dist
+from BayesCompare import measure_dist
 from numpy.testing import assert_allclose
-from torch.testing import assert_close
 import pytest
 
 ALL_MEASURES = [

@@ -6,130 +6,144 @@ Authors: Sezan Oral
 
 import numpy as np
 import torch
-
-import h5py
-import pickle
 import tqdm
-import os
 
 from joblib import Parallel, delayed
 import multiprocessing as mp
 
-from multiprocessing.queues import Queue
-from typing import Optional, Sequence
-from numpy.typing import NDArray
-
-from BayesCompare.distances import select_measure
-from BayesCompare.dist_utils import simplify_string
-from BayesCompare.cov_utils import (
+from BayesCompare.dist_utils import (
+    simplify_string,
+)
+from .cov_utils import (
     cov_trace_norm_sigma_N,
-    trace_norm_N,
     check_cov_symmetry,
+    check_and_change_input_format,
+    trace_norm_N,
     cov_sigma_N,
 )
+from .measure_distance_utils import select_measure, load_covs, check_saved_hdf, writer
+
+from numpy.typing import NDArray
+from typing import Optional, Sequence, Union
 
 
-def check_saved_hdf(
-    hdf_dir: str, N: int, covs_filename: str, measure_name: str
-) -> tuple[Sequence[tuple[int, int]], str]:
+def measure_dist(
+    covs: NDArray | torch.Tensor | Sequence[NDArray | torch.Tensor],
+    mean: Optional[NDArray | torch.Tensor | Sequence[int]] = None,
+    meas_name: str = "TVD",
+    noise_var: Optional[float] = None,
+    b: float = 0.0,
+    normalize: bool = True,
+    samples_jsd_tvd: int = 10000,
+    lmbd: Optional[float] = None,
+    k: Optional[int] = None,
+    generator: Optional[np.random.Generator | torch.Generator] = None,
+    show_progress: bool = True,
+) -> NDArray | torch.Tensor:
     """
-    Checks if the distance matrix for the given measure and covariance filename already exists in the specified directory.
-    If it exists, it identifies which pairwise distances are still missing (NaN) and returns their indices.
-    If it does not exist, it creates a new HDF5 file with the appropriate structure and returns the indices for all pairwise
-    distances that need to be computed.
+    Compute a symmetric pairwise distance matrix from the list of covariance matrices and optionally mean vectors.
+
+    It expects covariances matrices to be symmetric and positive semi-definite.
+    It trace-normalizes the covariance matrices to have trace equals to N (dimension of the square matrix) by default and
+    converts covariance arrays into a list of square matrices.
+
+    Parameters
+    ----------
+    covs : NDArray or torch.Tensor or a list/tuple of either of these types
+        A NumPy array or PyTorch tensor with shape (N, dim, dim) or a list/tuple of N matrices with shape (dim, dim).
+    mean : array-like, optional
+        Mean vactor of shape (N, dim).
+    meas_name : str, optional
+        Name of the distance/divergence measure to use. This name is resolved via `select_measure(meas_name)`. Default is "TVD".
+    noise_var : float, optional
+        Additive noise variance to be added to the covariance matrices.
+        If None, and a `b` value is provided, then noise_var is computed from the number of images (dim)
+        used to obtain the cov matrix and the parameter `b` using the formula
+        noise_var = (dim * b) / (1 + (dim * b)).
+        It overwrites b if both is provided. Default is None.
+    b : float, optional
+        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.
+    normalize : bool, optional
+        Flag for selecting to apply trace normalization or not. Defaults to True (normalization is applied by default).
+    samples_jsd_tvd : integer, optional
+        Number of samples used for computing JSD and TVD measures. Defaults to 10000.
+    generator: np.random.Generator or torch.Generator, optional
+        A Generator object for the randomization for generating samples for JSD and TVD computations. Default is None.
+    show_progress : bool, optional
+        Boolean to turn the tqdm progress bars on (True) or off (False). Default is on (True).
+
+    Returns
+    -------
+    dist : numpy.ndarray or torch.Tensor
+        A symmetric 2-D array of shape (N, N) containing pairwise distances covariance inputs.
+        The diagonal elements are zero.
+        Only the upper triangle (j > i) is computed explicitly and mirrored to the
+        lower triangle.
+
+    Examples
+    --------
+    >>> # Given a list of covariance matrices `cov_list`
+    >>> dist_matrix = measure_dist(cov_list, meas_name="TVD")
     """
-    # Check whether the folder exists
-    if not os.path.exists(hdf_dir):
-        os.makedirs(hdf_dir)
+    # normalize and add noise
+    if normalize and (b != 0 or noise_var):
+        if noise_var == None:  # if noise_var was not given but b is given
+            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+            noise_var = dim * b / (1 + (dim * b))
 
-    print(f"Now computing {measure_name}")
+        covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
 
-    # convention for the name of the distance HDF5 files is: dist_<covs_list_filename>_<measure_name>.hdf5
-    measure_name = simplify_string(measure_name)
-    hdf_filename = (
-        os.path.join(hdf_dir, "")
-        + "dist_"
-        + covs_filename
-        + "_"
-        + measure_name
-        + ".hdf5"
-    )
+    # normalize but don't add noise
+    elif normalize and not (b) and not (noise_var):
+        covs = trace_norm_N(covs)
 
-    if os.path.exists(hdf_filename):
-        with h5py.File(hdf_filename, "r") as f:
-            dist = f["dist"][...]
-            tril_idx = np.tril_indices(dist.shape[0], k=-1)
-            nan_mask = np.isnan(dist[tril_idx])
-            indices = [
-                [int(i), int(j)]
-                for i, j in zip(tril_idx[0][nan_mask], tril_idx[1][nan_mask])
-            ]
-    else:
-        with h5py.File(hdf_filename, "w") as f:
-            init_mtx = np.empty((N, N))
-            init_mtx[:] = np.nan
-            np.fill_diagonal(init_mtx, 0)
-            dist_dset = f.create_dataset("dist", shape=(N, N), data=init_mtx)
-            indices = [(i, j) for j in range(N) for i in range(j + 1, N)]
-            f.flush()
+    # don't normalize but add noise
+    elif not (normalize) and (b != 0 or noise_var):
+        if noise_var == None:  # if noise_var was not given but b is given
+            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+            noise_var = dim * b / (1 + (dim * b))
 
-    return indices, hdf_filename
+        covs = cov_sigma_N(covs, noise_var=noise_var)
 
+    covs, N, module = check_and_change_input_format(covs)
 
-def writer(file_dir: str, que: Queue, total_num_ops: int) -> None:
-    """
-    Writer process that listens to a queue for computed distance values and writes them to an HDF5 file.
-    It updates a progress bar as it writes the values.
-    """
-    progress_bar = tqdm.tqdm(total=int(total_num_ops))
+    idx = np.random.randint(len(covs))
+    symmetric = check_cov_symmetry(covs[idx])
+    if not symmetric:
+        raise ValueError(
+            f"Covariance matrices should be symmetric! The covariance matrix at index {idx} violates this condition."
+        )
 
-    with h5py.File(file_dir, "r+") as f:
-        res_dset = f["dist"]
-        while 1:
-            item = que.get()
-            if item is None:
-                break
+    meas_name = simplify_string(meas_name)
+    measure = select_measure(covs[0], meas_name, module=module)
 
-            res_dset[item[0], item[1]] = item[2]
-            res_dset[item[1], item[0]] = item[2]
-            f.flush()
-            progress_bar.update(1)
+    dist = module.zeros((N, N))
+
+    progress_bar = tqdm.tqdm(total=int((N * (N - 1)) / 2), disable=not show_progress)
+
+    for i, ci in enumerate(covs):
+        for j, cj in enumerate(covs):
+            if j > i:
+                if "tvd" in meas_name or "jsd" in meas_name:
+                    dist[i, j] = measure(
+                        ci, cj, num_samples=samples_jsd_tvd, gen=generator
+                    )  # not using mean, for a generalized code mean should be provided
+                elif "gulp" in meas_name:
+                    dist[i, j] = measure(ci, cj, lmbd=lmbd)
+                elif "jaccard" in meas_name:
+                    dist[i, j] = measure(ci, cj, k=k)
+                else:
+                    dist[i, j] = measure(
+                        ci, cj
+                    )  # not using mean, for a generalized code mean should be provided
+
+                dist[j, i] = dist[i, j]
+                progress_bar.update(1)
+
+    return dist
 
 
-def load_covs(full_filename: str) -> tuple[NDArray | torch.Tensor, str]:
-    """
-    Loads covariance matrices from a specified file. Supports .pkl, .pickle, .np, .npy, and .npz formats.
-    Returns the loaded covariance matrices and the base filename (without extension) for use in naming output files.
-    """
-    _, ext = os.path.splitext(full_filename)
-    pckl_exts = {".pkl", ".pickle"}
-    numpy_exts = {".np", ".npy", ".npz"}
-
-    if ext in pckl_exts:
-        filename_ext = os.path.basename(full_filename)
-        filename, ext = os.path.splitext(filename_ext)
-
-        with open(full_filename, "rb") as f:
-            covs_names = pickle.load(f)
-
-        if isinstance(covs_names, list) and isinstance(covs_names[0], dict):
-            covs = []
-            for cov_dict in covs_names:
-                covs.append(list(cov_dict.values()))
-            covs = np.stack(covs)
-            covs = covs.reshape(
-                covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3]
-            )
-
-        if isinstance(covs_names, np.ndarray):
-            covs = covs_names
-
-    elif ext in numpy_exts:
-        filename_ext = os.path.basename(full_filename)
-        filename, ext = os.path.splitext(filename_ext)
-        covs = np.load(full_filename)
-
-    return covs, filename
+## Helper functions
 
 
 def measure_dist_parallel(
