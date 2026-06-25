@@ -493,7 +493,7 @@ class TestFlattenActs:
             for layer in layer_list:
                 assert f["activations_" + layer].ndim == 2, (
                     f"{layer}: expected 2-D HDF5 dataset with flatten_acts=True, "
-                    f"got {f["activations_"+layer].ndim}-D"
+                    f"got {f['activations_'+layer].ndim}-D"
                 )
 
     def test_batch_flatten_acts_first_dim_is_n_images(
@@ -515,7 +515,7 @@ class TestFlattenActs:
             for layer in layer_list:
                 assert (
                     f["activations_" + layer].shape[0] == n
-                ), f"{layer}: expected first dim {n}, got {f["activations_"+layer].shape[0]}"
+                ), f"{layer}: expected first dim {n}, got {f['activations_'+layer].shape[0]}"
 
     def test_batch_flatten_acts_matches_extractor_flatten(
         self, model, inputs_np, layer_list, tmp_out
