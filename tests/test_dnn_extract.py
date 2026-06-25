@@ -6,6 +6,7 @@ Coverage
 - Output structure / types
 - Mathematical correctness (symmetry, PSD, variance/covariance, np.cov oracle)
 - Mode flags (gradient, eval_mode, inference_mode)
+- Flatten activations (flatten_acts flag)
 - File I/O and cleanup (batch function)
 - Edge cases & warnings
 - Reproducibility / random seed
@@ -338,7 +339,217 @@ class TestCovExtractorModes:
 
 
 # ---------------------------------------------------------------------------
-# 4. File I/O and cleanup  —  cov_extractor_batch
+# 4. Flatten activations  —  flatten_acts flag
+# ---------------------------------------------------------------------------
+
+
+class TestFlattenActs:
+
+    def test_flatten_acts_true_gives_2d_output(self, model, inputs_np, layer_list):
+        """flatten_acts=True must produce a 2-D tensor (N, C*H*W) per layer."""
+        result = cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            compute_covs=False,
+            flatten_acts=True,
+        )
+        for key, val in result.items():
+            assert (
+                val.dim() == 2
+            ), f"{key}: expected 2-D tensor with flatten_acts=True, got {val.dim()}-D"
+
+    def test_flatten_acts_false_preserves_original_shape(
+        self, model, inputs_np, layer_list
+    ):
+        """flatten_acts=False (default) must leave activations in their original shape."""
+        result_flat = cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            compute_covs=False,
+            flatten_acts=False,
+        )
+        result_no_flat = cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            compute_covs=False,
+        )
+        for key in layer_list:
+            assert (
+                result_flat[key].shape == result_no_flat[key].shape
+            ), f"{key}: flatten_acts=False changed the output shape unexpectedly"
+
+    def test_flatten_acts_first_dim_is_n_images(self, model, inputs_np, layer_list):
+        """After flattening, the first dimension must equal the number of input images."""
+        n = inputs_np.shape[0]
+        result = cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            compute_covs=False,
+            flatten_acts=True,
+        )
+        for key, val in result.items():
+            assert (
+                val.shape[0] == n
+            ), f"{key}: expected first dim {n}, got {val.shape[0]}"
+
+    def test_flatten_acts_second_dim_equals_product_of_rest(
+        self, model, inputs_np, layer_list
+    ):
+        """The second dimension after flattening must equal the product of all original non-batch dims."""
+        unflat = cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            compute_covs=False,
+            flatten_acts=False,
+        )
+        flat = cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            compute_covs=False,
+            flatten_acts=True,
+        )
+        for key in layer_list:
+            expected_flat_dim = unflat[key][
+                0
+            ].numel()  # product of all dims except batch
+            assert (
+                flat[key].shape[1] == expected_flat_dim
+            ), f"{key}: expected flattened dim {expected_flat_dim}, got {flat[key].shape[1]}"
+
+    def test_flatten_acts_values_unchanged(self, model, inputs_np, layer_list):
+        """Flattening must not change any activation values, only the shape."""
+        unflat = cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            compute_covs=False,
+            flatten_acts=False,
+        )
+        flat = cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            compute_covs=False,
+            flatten_acts=True,
+        )
+        for key in layer_list:
+            expected = unflat[key].detach().reshape(unflat[key].shape[0], -1)
+            np.testing.assert_array_equal(
+                flat[key].detach().numpy(),
+                expected.numpy(),
+                err_msg=f"{key}: values changed after flattening",
+            )
+
+    def test_flatten_acts_ignored_when_compute_covs_true(
+        self, model, inputs_np, layer_list
+    ):
+        """flatten_acts has no effect when compute_covs=True: output must be square covariance."""
+        result_flat = cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            compute_covs=True,
+            flatten_acts=True,
+        )
+        result_no_flat = cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            compute_covs=True,
+            flatten_acts=False,
+        )
+        for key in layer_list:
+            # Both should be square covariance matrices of the same shape
+            assert (
+                result_flat[key].shape == result_no_flat[key].shape
+            ), f"{key}: flatten_acts affected covariance output shape"
+            np.testing.assert_array_equal(
+                result_flat[key].detach().numpy(),
+                result_no_flat[key].detach().numpy(),
+                err_msg=f"{key}: flatten_acts affected covariance values",
+            )
+
+    def test_batch_flatten_acts_gives_2d_datasets(
+        self, model, inputs_np, layer_list, tmp_out
+    ):
+        """cov_extractor_batch with flatten_acts=True must save 2-D arrays in the HDF5."""
+        cov_extractor_batch(
+            model,
+            inputs_np,
+            layer_list,
+            out_filename="flat",
+            out_dir=tmp_out,
+            batch_size=5,
+            compute_covs=False,
+            flatten_acts=True,
+        )
+        with h5py.File(Path(tmp_out) / "activations_flat.hdf5", "r") as f:
+            for layer in layer_list:
+                assert f["activations_" + layer].ndim == 2, (
+                    f"{layer}: expected 2-D HDF5 dataset with flatten_acts=True, "
+                    f"got {f["activations_"+layer].ndim}-D"
+                )
+
+    def test_batch_flatten_acts_first_dim_is_n_images(
+        self, model, inputs_np, layer_list, tmp_out
+    ):
+        """After batch flattening, the first HDF5 dimension must equal n_images."""
+        n = inputs_np.shape[0]
+        cov_extractor_batch(
+            model,
+            inputs_np,
+            layer_list,
+            out_filename="flat_n",
+            out_dir=tmp_out,
+            batch_size=5,
+            compute_covs=False,
+            flatten_acts=True,
+        )
+        with h5py.File(Path(tmp_out) / "activations_flat_n.hdf5", "r") as f:
+            for layer in layer_list:
+                assert (
+                    f["activations_" + layer].shape[0] == n
+                ), f"{layer}: expected first dim {n}, got {f["activations_"+layer].shape[0]}"
+
+    def test_batch_flatten_acts_matches_extractor_flatten(
+        self, model, inputs_np, layer_list, tmp_out
+    ):
+        """Flattened activations from batch and single-call extractor must be identical."""
+        extractor_result = cov_extractor(
+            model,
+            inputs_np,
+            layer_list,
+            compute_covs=False,
+            flatten_acts=True,
+        )
+        cov_extractor_batch(
+            model,
+            inputs_np,
+            layer_list,
+            out_filename="flat_match",
+            out_dir=tmp_out,
+            batch_size=5,
+            compute_covs=False,
+            flatten_acts=True,
+        )
+        with h5py.File(Path(tmp_out) / "activations_flat_match.hdf5", "r") as f:
+            for layer in layer_list:
+                np.testing.assert_allclose(
+                    f["activations_" + layer][:],
+                    extractor_result[layer].detach().numpy(),
+                    rtol=1e-4,
+                    err_msg=f"{layer}: flattened activations differ between batch and extractor",
+                )
+
+
+# ---------------------------------------------------------------------------
+# 5. File I/O and cleanup  —  cov_extractor_batch
 # ---------------------------------------------------------------------------
 
 
@@ -509,7 +720,7 @@ class TestBatchFileIO:
 
 
 # ---------------------------------------------------------------------------
-# 5. Edge cases & warnings
+# 6. Edge cases & warnings
 # ---------------------------------------------------------------------------
 
 

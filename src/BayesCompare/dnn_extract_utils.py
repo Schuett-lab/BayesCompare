@@ -2,6 +2,8 @@ import torch
 import numpy as np
 import warnings
 import torchlens as tl
+import os
+import h5py
 
 from numpy.typing import NDArray
 from typing import Optional, List
@@ -110,7 +112,7 @@ def get_cov(
 
 
 def create_covs_dict(
-    trace_obj: tl.Trace, layer_names: List[str], compute_covs: bool
+    trace_obj: tl.Trace, layer_names: List[str], compute_covs: bool, flatten_acts: bool
 ) -> dict:
     """
     Creates a dict of covariances/activations from the trace object
@@ -120,7 +122,12 @@ def create_covs_dict(
         if compute_covs:
             covs_dict[layer_name] = trace_obj[layer_name].transformed_out
         else:
-            covs_dict[layer_name] = trace_obj[layer_name].tensor
+            if flatten_acts:
+                covs_dict[layer_name] = trace_obj[layer_name].tensor.reshape(
+                    trace_obj[layer_name].tensor.shape[0], -1
+                )
+            else:
+                covs_dict[layer_name] = trace_obj[layer_name].tensor
 
     return covs_dict
 
@@ -176,3 +183,38 @@ def make_mock_input(
     raise ValueError(
         "Could not infer a valid input shape. Please provide input_shape explicitly."
     )
+
+
+def check_hdf_exists_save_acts(
+    hdf5_dir, activations, num_inputs, dset_name, first_creation
+):
+    """
+    Checks if the HDF5 file exists in the given directory
+    """
+    if first_creation:
+        with h5py.File(hdf5_dir, "a") as f:
+            if dset_name not in f:
+                f.create_dataset(
+                    dset_name,
+                    shape=(activations.shape[0], *activations.shape[1:]),
+                    maxshape=(num_inputs, *activations.shape[1:]),
+                    data=activations,
+                    chunks=True,
+                )
+            else:
+                raise FileExistsError(
+                    f"Dataset {dset_name!r} already exists in HDF5 file {hdf5_dir!r}. "
+                    "Please remove the existing dataset, choose a different dataset name, "
+                    "or use a different output file."
+                )
+    elif not first_creation and os.path.exists(hdf5_dir):
+        with h5py.File(hdf5_dir, "a") as f:
+            dset = f[dset_name]
+            prev_len = len(dset)
+            dset.resize(
+                (
+                    prev_len + activations.shape[0],
+                    *activations.shape[1:],
+                )
+            )
+            dset[-activations.shape[0] :] = activations
