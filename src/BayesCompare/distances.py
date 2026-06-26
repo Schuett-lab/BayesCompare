@@ -589,6 +589,7 @@ DISTANCES = {
         "jsd",
         "jensenshannon",
         "jensenshannondivergence",
+        "jensenshannondistance",
         "kldiv",
         "kldivergence",
         "bhattacharyya",
@@ -617,6 +618,25 @@ DISTANCES = {
     ],
 }
 
+SIMILARITIES = [
+    "cka",
+    "rsa_arccos",
+    "rsa_cos",
+    "rsa_corr",
+    "rsa_rank",
+    "rsaarccos",
+    "rsacos",
+    "rsacorr",
+    "rsarank",
+    "distcorr",
+    "distancecorrelation",
+    "jaccard",
+    "normalized_bures_similarity",
+    "normalizedburessimilarity",
+    "normburessim",
+    "nbs",
+]
+
 REGISTRY = {
     "numpy": {
         "wasserstein": _wasserstein_numpy,
@@ -627,6 +647,7 @@ REGISTRY = {
         "jsd": _jsd_numpy,
         "jensenshannon": _jsd_numpy,
         "jensenshannondivergence": _jsd_numpy,
+        "jensenshannondistance": _jsd_numpy,
         "kldiv": _KL_div_numpy,
         "kldivergence": _KL_div_numpy,
         "bhattacharyya": _bhattacharyya_numpy,
@@ -655,6 +676,7 @@ REGISTRY = {
         "jsd": _jsd_torch,
         "jensenshannon": _jsd_torch,
         "jensenshannondivergence": _jsd_torch,
+        "jensenshannondistance": _jsd_torch,
         "kldiv": _KL_div_torch,
         "kldivergence": _KL_div_torch,
         "bhattacharyya": _bhattacharyya_torch,
