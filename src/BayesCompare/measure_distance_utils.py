@@ -9,7 +9,8 @@ from .distances import REGISTRY
 from .cov_utils import check_input_format
 from .dist_utils import simplify_string
 
-from typing import Optional, Callable
+from multiprocessing.queues import Queue
+from typing import Optional, Callable, Sequence
 from numpy.typing import NDArray
 from types import ModuleType
 
@@ -73,11 +74,16 @@ def select_measure(
     return measure
 
 
-def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
+def check_saved_hdf(
+    hdf_dir: str, N: int, covs_filename: str, measure_name: str
+) -> tuple[Sequence[tuple[int, int]], str]:
     """
-    Checks if an HDF5 file exists. if it doesn't creates it.
-    Returns the HDF5 filename and empty indices of the distance matrix inside the HDF5 file.
+    Checks if the distance matrix for the given measure and covariance filename already exists in the specified directory.
+    If it exists, it identifies which pairwise distances are still missing (NaN) and returns their indices.
+    If it does not exist, it creates a new HDF5 file with the appropriate structure and returns the indices for all pairwise
+    distances that need to be computed.
     """
+    # Check whether the folder exists
     if not os.path.exists(hdf_dir):
         os.makedirs(hdf_dir)
 
@@ -86,7 +92,12 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
     # convention for the name of the distance HDF5 files is: dist_<covs_list_filename>_<measure_name>.hdf5
     measure_name = simplify_string(measure_name)
     hdf_filename = (
-        os.path.join(hdf_dir, "") + "dist_" + covs_name + "_" + measure_name + ".hdf5"
+        os.path.join(hdf_dir, "")
+        + "dist_"
+        + covs_filename
+        + "_"
+        + measure_name
+        + ".hdf5"
     )
 
     if os.path.exists(hdf_filename):
@@ -113,11 +124,13 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
     return indices, hdf_filename
 
 
-def writer(file_dir, que, total_num_ops):
+def writer(file_dir: str, que: Queue, total_num_ops: int) -> None:
     """
-    Writer worker used by the parallel distance computing function `measure_dist_parallel`
+    Writer process that listens to a queue for computed distance values and writes them to an HDF5 file.
+    It updates a progress bar as it writes the values.
     """
     progress_bar = tqdm.tqdm(total=int(total_num_ops))
+
     with h5py.File(file_dir, "r+") as f:
         res_dset = f["dist"]
         while 1:
@@ -132,9 +145,10 @@ def writer(file_dir, que, total_num_ops):
             progress_bar.update(1)
 
 
-def load_covs(full_filename):
+def load_covs(full_filename: str) -> tuple[NDArray | torch.Tensor, str]:
     """
-    Function that loads covariances from the .npy or .pickle files
+    Loads covariance matrices from a specified file. Supports .pkl, .pickle, .np, .npy, and .npz formats.
+    Returns the loaded covariance matrices and the base filename (without extension) for use in naming output files.
     """
     _, ext = os.path.splitext(full_filename)
     pckl_exts = {".pkl", ".pickle"}

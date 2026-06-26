@@ -24,7 +24,7 @@ from .cov_utils import (
 from .measure_distance_utils import select_measure, load_covs, check_saved_hdf, writer
 
 from numpy.typing import NDArray
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence
 
 
 def measure_dist(
@@ -60,13 +60,17 @@ def measure_dist(
         If None, and a `b` value is provided, then noise_var is computed from the number of images (dim)
         used to obtain the cov matrix and the parameter `b` using the formula
         noise_var = (dim * b) / (1 + (dim * b)).
-        It overwrites b if both is provided. Default is None.
+        It overwrites b if both noise_var and b is provided. Default is None.
     b : float, optional
         Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.
     normalize : bool, optional
         Flag for selecting to apply trace normalization or not. Defaults to True (normalization is applied by default).
     samples_jsd_tvd : integer, optional
         Number of samples used for computing JSD and TVD measures. Defaults to 10000.
+    lmbd : float, optional
+        Lambda parameter for the GULP distance.
+    k : integer, optional
+        k parameter for determining the k-nearest neighbors for computing Jaccard similarity.
     generator: np.random.Generator or torch.Generator, optional
         A Generator object for the randomization for generating samples for JSD and TVD computations. Default is None.
     show_progress : bool, optional
@@ -193,6 +197,10 @@ def measure_dist_parallel(
         Flag for selecting to apply trace normalization or not. Defaults to True (normalization is applied by default).
     samples_jsd_tvd : integer, optional
         Number of samples used for computing JSD and TVD measures. Defaults to 10000.
+    lmbd : float, optional
+        Lambda parameter for the GULP distance.
+    k : integer, optional
+        k parameter for determining the k-nearest neighbors for computing Jaccard similarity.
     generator: np.random.Generator or torch.Generator, optional
         A Generator object for the randomization for generating samples for JSD and TVD computations. Default is None.
     num_workers : int, optional
