@@ -167,17 +167,17 @@ def make_mock_input(
 
         if isinstance(module, torch.nn.Conv1d):
             return torch.randn(
-                batch_size, module.in_channels, 32, device=device, dtype=dtype
+                batch_size, module.in_channels, 224, device=device, dtype=dtype
             )
 
         if isinstance(module, torch.nn.Conv2d):
             return torch.randn(
-                batch_size, module.in_channels, 32, 32, device=device, dtype=dtype
+                batch_size, module.in_channels, 224, 224, device=device, dtype=dtype
             )
 
         if isinstance(module, torch.nn.Conv3d):
             return torch.randn(
-                batch_size, module.in_channels, 16, 16, 16, device=device, dtype=dtype
+                batch_size, module.in_channels, 16, 224, 224, device=device, dtype=dtype
             )
 
     raise ValueError(
