@@ -5,8 +5,13 @@ import h5py
 import tqdm
 import pickle
 
-from .distances import REGISTRY
-from .cov_utils import check_input_format
+from .distances import REGISTRY, SIMILARITIES
+from .cov_utils import (
+    check_input_format,
+    cov_trace_norm_sigma_N,
+    trace_norm_N,
+    cov_sigma_N,
+)
 from .dist_utils import simplify_string
 
 from multiprocessing.queues import Queue
@@ -114,7 +119,10 @@ def check_saved_hdf(
         with h5py.File(hdf_filename, "w") as f:
             init_mtx = np.empty((N, N))
             init_mtx[:] = np.nan
-            np.fill_diagonal(init_mtx, 0)
+            if measure_name in SIMILARITIES:
+                np.fill_diagonal(init_mtx, 1)
+            else:
+                np.fill_diagonal(init_mtx, 0)
 
             dist_dset = f.create_dataset("dist", shape=(N, N), data=init_mtx)
             indices = [(i, j) for j in range(N) for i in range(j + 1, N)]
@@ -181,3 +189,120 @@ def load_covs(full_filename: str) -> tuple[NDArray | torch.Tensor, str]:
         covs = np.load(full_filename)
 
     return covs, filename
+
+
+def preprocess_input_covs(
+    covs: NDArray | torch.Tensor | Sequence[NDArray | torch.Tensor],
+    noise_var: Optional[float] = None,
+    b: float = 0.0,
+    normalize: bool = True,
+):
+    """
+    Applies specified preprocessing steps to covariances:
+    trace normalization, and noise addition using either noise_var or b
+    """
+    # normalize and add noise
+    if normalize and (b != 0 or noise_var):
+        if noise_var == None:  # if noise_var was not given but b is given
+            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+            noise_var = dim * b / (1 + (dim * b))
+
+        covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
+
+    # normalize but don't add noise
+    elif normalize and not (b) and not (noise_var):
+        covs = trace_norm_N(covs)
+
+    # don't normalize but add noise
+    elif not (normalize) and (b != 0 or noise_var):
+        if noise_var == None:  # if noise_var was not given but b is given
+            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+            noise_var = dim * b / (1 + (dim * b))
+
+        covs = cov_sigma_N(covs, noise_var=noise_var)
+
+    return covs
+
+
+def get_preprocessing_params(meas_name, b, noise_var, normalize):
+    """
+    Converts required preprocessing parameters into lists.
+    """
+    if isinstance(meas_name, str):
+        meas_name = [meas_name]
+
+        if isinstance(b, float):
+            b_list = [b]
+        else:
+            raise TypeError(
+                f"When single measure name is given, `b` can only be a float! Given b type is {type(b)}"
+            )
+
+        if isinstance(noise_var, float):
+            noise_var_list = [noise_var]
+        elif noise_var is None:
+            noise_var_list = None
+        else:
+            raise TypeError(
+                f"When single measure name is given, `noise_var` can only be a float! Given noise_var type is {type(noise_var)}"
+            )
+
+        if isinstance(normalize, bool):
+            normalize_list = [normalize]
+        else:
+            raise TypeError(
+                f"When single measure name is given, `normalize` can only be a bool! Given normalize type is {type(normalize)}"
+            )
+
+    elif isinstance(meas_name, list):
+
+        if isinstance(b, float):
+            b_list = [b] * len(meas_name)
+        elif isinstance(b, list):
+            if isinstance(b[0], float):
+                b_list = b
+            else:
+                raise TypeError(
+                    f"`b` can either be a float or a list of floats! Given b type is {type(b)}"
+                )
+        else:
+            raise TypeError(
+                f"`b` can either be a float or a list of floats! Given b type is {type(b)}"
+            )
+
+        if isinstance(noise_var, float):
+            noise_var_list = [noise_var] * len(meas_name)
+        elif isinstance(noise_var, list):
+            if isinstance(noise_var[0], float):
+                noise_var_list = noise_var
+            else:
+                raise TypeError(
+                    f"`noise_var` can either be a float or a list of floats! Given noise_var type is {type(noise_var)}"
+                )
+        elif noise_var is None:
+            noise_var_list = None
+        else:
+            raise TypeError(
+                f"`noise_var` can either be a float or a list of floats! Given noise_var type is {type(noise_var)}"
+            )
+
+        if isinstance(normalize, bool):
+            normalize_list = [normalize] * len(meas_name)
+        elif isinstance(normalize, list):
+            if isinstance(normalize[0], bool):
+                normalize_list = normalize
+            else:
+                raise TypeError(
+                    f"`normalize` can either be a bool or a list of bools! Given normalize type is {type(normalize)}"
+                )
+        else:
+            raise TypeError(
+                f"`normalize` can either be a bool or a list of bools! Given normalize type is {type(normalize)}"
+            )
+
+    else:
+        raise TypeError(
+            f"Measure name cannot be {type(meas_name)}. It can either be a string or a list of strings."
+        )
+
+    return meas_name, b_list, noise_var_list, normalize_list
