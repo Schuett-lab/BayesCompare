@@ -38,9 +38,9 @@ class TinyNet(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.linear_1_2 = nn.Linear(192, 8, bias=False)  # 3×8×8 = 192
+        self.linear_1_2 = nn.Linear(48, 6, bias=False)  # 3×4×4 = 48
         self.relu = nn.ReLU()
-        self.linear_2_4 = nn.Linear(8, 4, bias=False)
+        self.linear_2_4 = nn.Linear(6, 3, bias=False)
 
     def forward(self, x):
         x = x.view(x.size(0), -1)
@@ -56,9 +56,16 @@ def model():
 
 @pytest.fixture
 def inputs_np():
-    """20 RGB images of 8×8, float32, fixed seed."""
+    """10 RGB images of 4×4, float32, fixed seed."""
     rng = np.random.default_rng(0)
-    return rng.standard_normal((20, 3, 8, 8)).astype(np.float32)
+    return rng.standard_normal((10, 3, 4, 4)).astype(np.float32)
+
+
+@pytest.fixture
+def inputs_np_large():
+    """20 RGB images of 4×4, float32, fixed seed — used for batch tests."""
+    rng = np.random.default_rng(0)
+    return rng.standard_normal((20, 3, 4, 4)).astype(np.float32)
 
 
 @pytest.fixture
@@ -476,12 +483,12 @@ class TestFlattenActs:
             )
 
     def test_batch_flatten_acts_gives_2d_datasets(
-        self, model, inputs_np, layer_list, tmp_out
+        self, model, inputs_np_large, layer_list, tmp_out
     ):
         """cov_extractor_batch with flatten_acts=True must save 2-D arrays in the HDF5."""
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="flat",
             out_dir=tmp_out,
@@ -497,13 +504,13 @@ class TestFlattenActs:
                 )
 
     def test_batch_flatten_acts_first_dim_is_n_images(
-        self, model, inputs_np, layer_list, tmp_out
+        self, model, inputs_np_large, layer_list, tmp_out
     ):
         """After batch flattening, the first HDF5 dimension must equal n_images."""
-        n = inputs_np.shape[0]
+        n = inputs_np_large.shape[0]
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="flat_n",
             out_dir=tmp_out,
@@ -518,19 +525,19 @@ class TestFlattenActs:
                 ), f"{layer}: expected first dim {n}, got {f['activations_'+layer].shape[0]}"
 
     def test_batch_flatten_acts_matches_extractor_flatten(
-        self, model, inputs_np, layer_list, tmp_out
+        self, model, inputs_np_large, layer_list, tmp_out
     ):
         """Flattened activations from batch and single-call extractor must be identical."""
         extractor_result = cov_extractor(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             compute_covs=False,
             flatten_acts=True,
         )
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="flat_match",
             out_dir=tmp_out,
@@ -555,10 +562,10 @@ class TestFlattenActs:
 
 class TestBatchFileIO:
 
-    def test_cov_pickle_created(self, model, inputs_np, layer_list, tmp_out):
+    def test_cov_pickle_created(self, model, inputs_np_large, layer_list, tmp_out):
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="test",
             out_dir=tmp_out,
@@ -570,11 +577,11 @@ class TestBatchFileIO:
         assert pkl_path.exists(), "covariance pickle file was not created"
 
     def test_cov_pickle_contains_expected_keys(
-        self, model, inputs_np, layer_list, tmp_out
+        self, model, inputs_np_large, layer_list, tmp_out
     ):
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="test",
             out_dir=tmp_out,
@@ -587,11 +594,11 @@ class TestBatchFileIO:
         assert set(saved.keys()) == set(layer_list)
 
     def test_activation_hdf5_created_when_compute_covs_false(
-        self, model, inputs_np, layer_list, tmp_out
+        self, model, inputs_np_large, layer_list, tmp_out
     ):
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="test",
             out_dir=tmp_out,
@@ -602,11 +609,11 @@ class TestBatchFileIO:
         assert hdf5_path.exists(), "activations HDF5 file was not created"
 
     def test_hdf5_contains_expected_datasets(
-        self, model, inputs_np, layer_list, tmp_out
+        self, model, inputs_np_large, layer_list, tmp_out
     ):
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="test",
             out_dir=tmp_out,
@@ -624,11 +631,11 @@ class TestBatchFileIO:
                 ), f"Layer '{layer}' missing from HDF5"
 
     def test_activation_files_deleted_when_flag_true(
-        self, model, inputs_np, layer_list, tmp_out
+        self, model, inputs_np_large, layer_list, tmp_out
     ):
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="test",
             out_dir=tmp_out,
@@ -640,11 +647,11 @@ class TestBatchFileIO:
         assert not hdf5_path.exists(), "activation file should have been deleted"
 
     def test_activation_files_kept_when_flag_false(
-        self, model, inputs_np, layer_list, tmp_out
+        self, model, inputs_np_large, layer_list, tmp_out
     ):
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="test",
             out_dir=tmp_out,
@@ -656,11 +663,11 @@ class TestBatchFileIO:
         assert hdf5_path.exists(), "activation file should have been kept"
 
     def test_layer_by_layer_creates_separate_files(
-        self, model, inputs_np, layer_list, tmp_out
+        self, model, inputs_np_large, layer_list, tmp_out
     ):
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="test",
             out_dir=tmp_out,
@@ -674,11 +681,11 @@ class TestBatchFileIO:
             assert pkl_path.exists(), f"Per-layer pickle for '{layer}' not found"
 
     def test_combined_file_not_created_in_layer_by_layer_mode(
-        self, model, inputs_np, layer_list, tmp_out
+        self, model, inputs_np_large, layer_list, tmp_out
     ):
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="test",
             out_dir=tmp_out,
@@ -693,13 +700,13 @@ class TestBatchFileIO:
         ), "combined pickle should not exist in layer_by_layer mode"
 
     def test_batch_cov_matches_extractor_cov(
-        self, model, inputs_np, layer_list, tmp_out
+        self, model, inputs_np_large, layer_list, tmp_out
     ):
         """Batch and cov_extractor paths must produce numerically identical covariances."""
-        extractor_result = cov_extractor(model, inputs_np, layer_list)
+        extractor_result = cov_extractor(model, inputs_np_large, layer_list)
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="match",
             out_dir=tmp_out,
@@ -728,7 +735,7 @@ class TestEdgeCases:
 
     def test_single_image_does_not_crash(self, model):
         """n=1 is an edge case; at minimum it should not raise."""
-        single = np.random.randn(1, 3, 8, 8).astype(np.float32)
+        single = np.random.randn(1, 3, 4, 4).astype(np.float32)
         try:
             result = cov_extractor(model, single, "linear_1_2")
             assert "linear_1_2" in result
@@ -747,12 +754,12 @@ class TestEdgeCases:
         assert result == {} or isinstance(result, dict)
 
     def test_large_batch_size_exceeds_inputs(
-        self, model, inputs_np, layer_list, tmp_out
+        self, model, inputs_np_large, layer_list, tmp_out
     ):
         """batch_size > n_inputs should not crash."""
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="bigbatch",
             out_dir=tmp_out,
@@ -762,10 +769,10 @@ class TestEdgeCases:
         )
         assert (Path(tmp_out) / "covs_bigbatch.pkl").exists()
 
-    def test_batch_size_one(self, model, inputs_np, layer_list, tmp_out):
+    def test_batch_size_one(self, model, inputs_np_large, layer_list, tmp_out):
         cov_extractor_batch(
             model,
-            inputs_np,
+            inputs_np_large,
             layer_list,
             out_filename="bs1",
             out_dir=tmp_out,
@@ -802,7 +809,7 @@ class TestReproducibility:
                 "Model appears deterministic; seed difference test not applicable"
             )
 
-    def test_batch_reproducibility(self, model, inputs_np, layer_list, tmp_path):
+    def test_batch_reproducibility(self, model, inputs_np_large, layer_list, tmp_path):
         """Two batch runs with the same seed must produce identical pickle files."""
         # this test runs correctly as the model and input are deterministic but is not valid for cov_extractor_batch
         for run, name in enumerate(["run1", "run2"]):
@@ -810,7 +817,7 @@ class TestReproducibility:
             os.makedirs(out)
             cov_extractor_batch(
                 model,
-                inputs_np,
+                inputs_np_large,
                 layer_list,
                 out_filename=name,
                 out_dir=out,

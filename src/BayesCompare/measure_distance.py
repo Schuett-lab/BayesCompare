@@ -143,9 +143,6 @@ def measure_dist(
     return dist
 
 
-## Helper functions
-
-
 def measure_dist_parallel(
     covs_dir: str,
     output_dir: str,

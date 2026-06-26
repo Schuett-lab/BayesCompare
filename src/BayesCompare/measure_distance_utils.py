@@ -18,11 +18,7 @@ def select_measure(
     cov_mtx: NDArray | torch.Tensor, meas_name: str, module: Optional[ModuleType] = None
 ) -> Callable:
     """
-    Select and return the appropriate distance measure function based on input covariances and measure name.
-
-    Selects a distance/similarity measure function that is compatible with
-    the given covariance matrix type (NumPy array or PyTorch tensor) and the specified
-    metric name.
+    Select and return the appropriate distance measure function based on input covariances type (NumPy array or PyTorch tensor) and measure name.
 
     Parameters
     ----------
