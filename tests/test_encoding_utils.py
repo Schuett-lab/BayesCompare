@@ -5,10 +5,11 @@ _check_consistent_repetitions and noise_estimation.
 Run with: pytest test_encoding_utils.py -v
 """
 
-from types import SimpleNamespace
+import pytest
 
 import numpy as np
-import pytest
+
+from types import SimpleNamespace
 from numpy.testing import assert_almost_equal
 
 from BayesCompare.encoding_utils import (
@@ -51,6 +52,7 @@ def balanced_case(balanced_stim_list):
     data = np.array([1, 3, 5, 10, 10, 10, 2, 4, 6], dtype=float)
     split_param = 3  # n_groups, as produced internally for the balanced case
     expected_noise = 16 / 6
+
     return SimpleNamespace(
         stim_list=balanced_stim_list,
         data=data,
@@ -75,6 +77,7 @@ def imbalanced_case(imbalanced_stim_list):
     data = np.array([5, 7, 10, 12, 14, 100], dtype=float)
     split_param = np.array([2, 5])  # cumsum(counts)[:-1], as produced internally
     expected_noise = 10 / 3
+
     return SimpleNamespace(
         stim_list=imbalanced_stim_list,
         data=data,
@@ -83,9 +86,7 @@ def imbalanced_case(imbalanced_stim_list):
     )
 
 
-# ---------------------------------------------------------------------------
-# _check_consistent_repetitions
-# ---------------------------------------------------------------------------
+## Tests for _check_consistent_repetitions
 
 
 def test_check_consistent_repetitions_balanced_returns_true(balanced_stim_list):
@@ -116,8 +117,9 @@ def test_check_consistent_repetitions_single_stimulus_group():
 
 
 def test_check_consistent_repetitions_non_consecutive_repeats_are_separate_groups():
-    # groupby only merges *consecutive* equal elements, per the function's
-    # documented assumption that repeats are grouped.
+    # As stated in the docstring, it is asumed that all equal IDs are already
+    # grouped in stim_list. If they are separated they are treated as different
+    # groups
     stim_list = [1, 1, 2, 1, 1]
     consistent, counts = _check_consistent_repetitions(stim_list)
     # groups: (1,1) (2) (1,1) -> counts [2, 1, 2]
@@ -126,16 +128,12 @@ def test_check_consistent_repetitions_non_consecutive_repeats_are_separate_group
 
 
 def test_check_consistent_repetitions_empty_list_raises():
-    # counts becomes an empty array; counts[0] raises IndexError.
-    # Documenting this as expected (known) behavior rather than silently
-    # allowing it, so a future refactor that changes this is caught.
+    # Check that passing an empty list results in an IndexError
     with pytest.raises(IndexError):
         _check_consistent_repetitions([])
 
 
-# ---------------------------------------------------------------------------
-# noise_estimation
-# ---------------------------------------------------------------------------
+# Tests for noise_estimation
 
 
 def test_noise_estimation_balanced_matches_manual_calculation(balanced_case):
@@ -149,15 +147,14 @@ def test_noise_estimation_imbalanced_matches_manual_calculation(imbalanced_case)
 
 
 def test_noise_estimation_zero_noise_when_repetitions_identical():
-    # if every repetition of every stim is identical, noise is exactly 0
     data = np.array([5.0, 5.0, 5.0, 9.0, 9.0, 9.0])
     result = noise_estimation(data, 2)
     assert_almost_equal(result, 0.0)
 
 
 def test_noise_estimation_single_repetition_group_contributes_zero_variance():
-    # a stim with only 1 repetition can't contribute a within-stim
-    # difference, but it still reduces the denominator by 1.
+    # Test that stim with 1 rep do not contribute to numerator but still
+    # contributes to denominator
     data = np.array([1.0, 3.0, 100.0])  # groups: [1,3], [100]
     split_param = np.array([2])
     result = noise_estimation(data, split_param)
@@ -167,20 +164,14 @@ def test_noise_estimation_single_repetition_group_contributes_zero_variance():
 
 
 def test_noise_estimation_no_repetitions_anywhere_raises():
-    # every group has exactly 1 element -> diff list is empty ->
-    # np.concatenate on an empty list of arrays raises ValueError.
-    # This documents real, current behavior of the function; if the
-    # function is later hardened to return NaN or 0 instead, update
-    # this test accordingly.
+    # If no stimuli has repetitions, then the function should raise a ValueError
     data = np.array([1.0, 2.0, 3.0, 4.0])
     split_param = np.array([1, 2, 3])
     with pytest.raises(ValueError):
         noise_estimation(data, split_param)
 
 
-# ---------------------------------------------------------------------------
-# voxel_reliability (end-to-end)
-# ---------------------------------------------------------------------------
+## Tests for voxel_reliability
 
 
 def test_voxel_reliability_output_shapes(balanced_stim_list):
@@ -227,8 +218,7 @@ def test_voxel_reliability_imbalanced_matches_manual_calculation(imbalanced_case
 
 
 def test_voxel_reliability_multiple_voxels_independent(imbalanced_case):
-    # a second, distinct voxel alongside the known-correct imbalanced_case
-    # voxel, to guard against e.g. accidental cross-voxel broadcasting bugs
+    # Add a second voxel to test multiple voxel data
     other_data = np.array([1, 3, 5, 10, 15, 50], dtype=float)
     voxel_data = np.vstack([imbalanced_case.data, other_data])
 
@@ -247,7 +237,7 @@ def test_voxel_reliability_multiple_voxels_independent(imbalanced_case):
 def test_voxel_reliability_perfectly_reliable_voxel_has_reliability_near_one(
     balanced_stim_list,
 ):
-    # identical repetitions within each stim -> zero noise -> reliability == 1
+    # No variability should produce a reliability of 1 and a noise variance of 0
     voxel_data = np.array(
         [
             [1, 1, 1, 5, 5, 5, 9, 9, 9],
@@ -255,7 +245,7 @@ def test_voxel_reliability_perfectly_reliable_voxel_has_reliability_near_one(
         dtype=float,
     )
 
-    reliability, sigma_noise, sigma_tot = voxel_reliability(
+    reliability, sigma_noise, _ = voxel_reliability(
         voxel_data, balanced_stim_list, n_jobs=1
     )
     assert_almost_equal(sigma_noise[0], 0.0)
@@ -263,6 +253,7 @@ def test_voxel_reliability_perfectly_reliable_voxel_has_reliability_near_one(
 
 
 def test_voxel_reliability_n_jobs_parallel_matches_serial(imbalanced_stim_list):
+    # Make sure there is no difference by using parallelization
     np.random.seed(42)
     voxel_data = np.random.normal(size=(4, len(imbalanced_stim_list)))
 
@@ -273,10 +264,9 @@ def test_voxel_reliability_n_jobs_parallel_matches_serial(imbalanced_stim_list):
         assert_almost_equal(s, p)
 
 
-def test_voxel_reliability_return_order_is_reliability_noise_total(balanced_stim_list):
-    # guards against accidental reordering of the return tuple, since
-    # sigma_tot should always be >= sigma_noise for these fixtures,
-    # and reliability should be in (roughly) [0, 1] for well-behaved data
+def test_voxel_reliability_sensible_output(balanced_stim_list):
+    # Make sure that reliability is between 0 and 1, and that
+    # total variance is higher than noise variance
     voxel_data = np.array(
         [
             [1, 2, 3, 10, 11, 12, 20, 21, 22],
@@ -293,15 +283,13 @@ def test_voxel_reliability_return_order_is_reliability_noise_total(balanced_stim
 def test_voxel_reliability_zero_total_variance_produces_runtime_warning(
     balanced_stim_list,
 ):
-    # a voxel that is constant across all stimuli has sigma_tot == 0,
-    # so reliability = 1 - sigma_noise/0 is a division by zero.
+    # A voxel constant across stimuli should raise a RunTimeWarning due to
+    # division by 0 and have 0 total variance
     voxel_data = np.array(
         [
             [5.0] * 9,
         ]
     )
     with pytest.warns(RuntimeWarning):
-        reliability, sigma_noise, sigma_tot = voxel_reliability(
-            voxel_data, balanced_stim_list, n_jobs=1
-        )
+        _, _, sigma_tot = voxel_reliability(voxel_data, balanced_stim_list, n_jobs=1)
     assert sigma_tot[0] == 0.0
