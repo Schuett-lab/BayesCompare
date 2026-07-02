@@ -2,9 +2,14 @@ import numpy as np
 
 from itertools import groupby
 from joblib import Parallel, delayed
+from typing import Optional, Tuple
+
+from numpy.typing import NDArray
+from scipy.optimize import minimize
+from scipy.stats import beta
 
 
-def _check_consistent_repetitions(stim_list):
+def _check_consistent_repetitions(stim_list: NDArray) -> Tuple[bool, NDArray]:
     """Check if all elements of the list are repeated the same number of times"""
 
     counts = np.array([len(list(group)) for _, group in groupby(stim_list)])
@@ -12,7 +17,7 @@ def _check_consistent_repetitions(stim_list):
     return constant, counts
 
 
-def noise_estimation(data, split_param):
+def noise_estimation(data: NDArray, split_param: NDArray | int) -> float:
     """
     Estimate the variance of each voxel attributed to the noise. Expressed as
     the mean of the variances of each image across their repetitions.
@@ -32,7 +37,9 @@ def noise_estimation(data, split_param):
     return sigma_noise
 
 
-def voxel_reliability(voxel_data, stim_list, n_jobs=-1):
+def voxel_reliability(
+    voxel_data: NDArray, stim_list: NDArray, n_jobs: int = -1
+) -> Tuple[NDArray, NDArray, NDArray]:
     """
     Calculate voxel reliability by estimating noise variance across repetitions
     of the same stimuli.
@@ -79,3 +86,51 @@ def voxel_reliability(voxel_data, stim_list, n_jobs=-1):
     reliability = 1 - (sigma_noise / sigma_tot)
 
     return reliability, sigma_noise, sigma_tot
+
+
+def _neg_loglik(a, x):
+    if a <= 0:
+        return np.inf
+    return -(len(x) * np.log(a) + (a - 1) * np.sum(np.log(x)))
+
+
+def sample_noise_values(
+    noise_var: NDArray,
+    total_var: NDArray,
+    n_vals: int = 10,
+    method: str = "mle",
+    a: Optional[float] = None,
+    b: Optional[float] = None,
+    return_params: bool = False,
+) -> Tuple[NDArray, float, float] | NDArray:
+    """
+    Obtain noise values to use on the analysis. A beta-distribution is q fitted
+    to the participant's SNR and values are sampled from the inverse CDF in
+    order to sample more densely where the noise distribution's likelihood is
+    higher
+    """
+    noise_ratio = noise_var / total_var
+    # Fix b=1 and estimate a via maximum likelihood estimation
+    if method == "mle":
+        optimizer = minimize(
+            _neg_loglik, x0=np.array([1.0]), args=(noise_ratio,), bounds=[(1e-6, None)]
+        )
+        a = optimizer.x[0]
+        b = 1.0
+    elif method == "fixed":
+        if a is None or b is None:
+            raise ValueError(
+                f"Method {method} requires parameters a and b to be specified"
+            )
+    else:
+        raise NotImplementedError(f"Invalid method {method}")
+
+    # Sample from the CDF and obtain the corresponding values in the X-axis
+    n_bins = 2 * n_vals
+    y_vals = np.linspace(1 / n_bins, (n_bins - 1) / n_bins, n_vals)
+    noise_vals = beta.ppf(y_vals, a, b)
+
+    if return_params:
+        return noise_vals, a, b
+    else:
+        return noise_vals
