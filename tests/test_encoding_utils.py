@@ -19,11 +19,6 @@ from BayesCompare.encoding_utils import (
 )
 
 
-# ---------------------------------------------------------------------------
-# fixtures
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture
 def balanced_stim_list():
     # 3 stimuli, 3 reps each, grouped consecutively
