@@ -13,6 +13,7 @@ permissions:
   contents: read
   checks: write
   pull-requests: write
+  code-quality: write
 
 jobs:
   build:
