@@ -194,7 +194,7 @@ def load_covs(full_filename: str) -> tuple[NDArray | torch.Tensor, str]:
 def preprocess_input_covs(
     covs: NDArray | torch.Tensor | Sequence[NDArray | torch.Tensor],
     noise_var: Optional[float] = None,
-    b: float = 0.0,
+    b: float = 0.01,
     normalize: bool = True,
 ):
     """

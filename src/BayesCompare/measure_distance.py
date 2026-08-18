@@ -15,11 +15,8 @@ from BayesCompare.dist_utils import (
     simplify_string,
 )
 from .cov_utils import (
-    cov_trace_norm_sigma_N,
     check_cov_symmetry,
     check_and_change_input_format,
-    trace_norm_N,
-    cov_sigma_N,
 )
 from .measure_distance_utils import (
     select_measure,
@@ -40,7 +37,7 @@ def measure_dist(
     mean: Optional[NDArray | torch.Tensor | Sequence[int]] = None,
     meas_name: str = "TVD",
     noise_var: Optional[float] = None,
-    b: float = 0.0,
+    b: float = 0.01,
     normalize: bool = True,
     samples_jsd_tvd: int = 10000,
     lmbd: Optional[float] = None,
@@ -52,8 +49,8 @@ def measure_dist(
     Compute a symmetric pairwise distance matrix from the list of covariance matrices and optionally mean vectors.
 
     It expects covariances matrices to be symmetric and positive semi-definite.
-    It trace-normalizes the covariance matrices to have trace equals to N (dimension of the square matrix) by default and
-    converts covariance arrays into a list of square matrices.
+    It trace-normalizes the covariance matrices to have trace equals to N (dimension of the square matrix) and adds noise variance using b=0.01 by default and
+    converts covariance arrays into a list of square matrices. If you want to use the raw covariance matrices, set `normalize=False` and `b=0`.
 
     Parameters
     ----------
@@ -70,7 +67,7 @@ def measure_dist(
         noise_var = (dim * b) / (1 + (dim * b)).
         It overwrites b if both noise_var and b is provided. Default is None.
     b : float, optional
-        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.
+        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.01.
     normalize : bool, optional
         Flag for selecting to apply trace normalization or not. Defaults to True (normalization is applied by default).
     samples_jsd_tvd : integer, optional
@@ -153,7 +150,7 @@ def measure_dist_parallel(
     mean: Optional[str] = None,
     meas_name: str | Sequence[str] = ["TVD"],
     noise_var: Optional[float | Sequence[float]] = None,
-    b: float | Sequence[float] = 0.0,
+    b: float | Sequence[float] = 0.01,
     normalize: bool | Sequence[bool] = True,
     samples_jsd_tvd: int = 10000,
     lmbd: Optional[float] = None,
@@ -169,6 +166,8 @@ def measure_dist_parallel(
     incrementally to an HDF file by a dedicated writer process. Previously computed distances can be
     reused: when an output HDF already contains the requested entries, computation for those
     pairs is skipped.
+
+    Important: By default, function trace-normalizes and adds noise to the covariance matrices. If you want to use the raw covariance matrices, set `normalize=False` and `b=0`.
 
     Parameters
     ----------
@@ -193,7 +192,7 @@ def measure_dist_parallel(
         noise_var = (dim * b) / (1 + (dim * b)).
         It overwrites b if both is provided. Default is None.
     b : float, optional
-        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.
+        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.01.
         When `meas_name` is a list of metrics, `b` can also be specified as a list with the same length for each metric.
     normalize : bool, optional
         Flag for selecting to apply trace normalization or not. Defaults to True (normalization is applied by default).
