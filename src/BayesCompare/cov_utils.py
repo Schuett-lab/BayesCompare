@@ -57,7 +57,9 @@ def cov_sigma(
     if img_weights is not None:
         cov_sigma = signal_var * cov + noise_var * np.diag(1 / img_weights)
     else:
-        cov_sigma = signal_var * cov + noise_var * module.eye(cov.shape[0])
+        cov_sigma = signal_var * cov + noise_var * module.eye(
+            cov.shape[0], device=cov.device
+        )
 
     return cov_sigma
 
