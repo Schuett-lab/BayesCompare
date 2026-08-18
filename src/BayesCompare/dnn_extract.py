@@ -65,6 +65,7 @@ def cov_extractor(
     gradient: bool = False,
     eval_mode: bool = True,
     inference_mode: bool = True,
+    save_raw_output: bool = False,
     flatten_acts: bool = False,
 ) -> dict:
     """
@@ -138,6 +139,9 @@ def cov_extractor(
         out_transform = None
         save_raw_outs = True
 
+    if save_raw_output:
+        save_raw_outs = True
+
     if eval_mode:
         model.eval()
 
@@ -149,6 +153,7 @@ def cov_extractor(
         random_seed=random_seed,
         backward_ready=backward_ready,
         save_raw_outs=save_raw_outs,
+        save_raw_output=save_raw_output,
     )
 
     if inference_mode:
@@ -157,7 +162,9 @@ def cov_extractor(
     else:
         trace = tl.trace(**trace_kwargs)
 
-    return create_covs_dict(trace, layer_list, compute_covs, flatten_acts)
+    return create_covs_dict(
+        trace, layer_list, compute_covs, flatten_acts, save_raw_output
+    )
 
 
 def act_extractor_batch(
