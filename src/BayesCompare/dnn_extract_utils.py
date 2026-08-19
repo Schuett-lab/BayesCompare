@@ -116,7 +116,7 @@ def create_covs_dict(
     layer_names: List[str],
     compute_covs: bool,
     flatten_acts: bool,
-    save_raw_output: bool,
+    save_network_output: bool,
 ) -> dict:
     """
     Creates a dict of covariances/activations from the trace object
@@ -132,7 +132,7 @@ def create_covs_dict(
                 )
             else:
                 covs_dict[layer_name] = trace_obj[layer_name].tensor
-    if save_raw_output:
+    if save_network_output:
         covs_dict["output_1"] = trace_obj["output_1"].tensor
     return covs_dict
 
