@@ -22,7 +22,7 @@ def simplify_string(s: str) -> str:
 
 def check_array(
     dist_output: NDArray | torch.Tensor,
-) -> NDArray | torch.Tensor:
+) -> float:
     """If the distance output is a 1 dimensional array with only one element,
     return the element itself. Otherwise, return the original output.
 
@@ -33,7 +33,7 @@ def check_array(
 
     Returns
     -------
-    dist_output : NDArray or torch.Tensor
+    dist_output : float
         The value inside the 1D array if the input is a 1D array with one element, otherwise the original input.
 
     Raises
@@ -51,7 +51,7 @@ def check_array(
 
     elif isinstance(dist_output, torch.Tensor):
         if dist_output.ndim == 0:
-            return dist_output
+            return dist_output.item()
         elif dist_output.shape[0] == 1 and len(dist_output.shape) == 1:
             return dist_output.item()
         else:
@@ -80,19 +80,24 @@ def check_small_negative(
     -------
     d: float or NDArray or torch.Tensor
         The input distance, but if it is a small negative value (smaller than epsilon), it is set to zero.
+
+    Raises
+    ------
+    TypeError
+        If the input is not one of these types: integer, float, numpy array or a torch tensor.
     """
     # Python / NumPy scalar
     if isinstance(d, (int, float, np.floating)):
         return 0.0 if (-epsilon < d < 0) else d
 
     # NumPy array
-    if isinstance(d, np.ndarray):
+    elif isinstance(d, np.ndarray):
         if -epsilon < d[0] < 0:
             d[0] = 0.0
         return d
 
     # Torch tensor
-    if isinstance(d, torch.Tensor):
+    elif isinstance(d, torch.Tensor):
         if d.ndim == 0:
             if -epsilon < d < 0:
                 d[()] = 0.0
@@ -102,13 +107,16 @@ def check_small_negative(
 
         return d
 
-    return d
+    else:
+        raise TypeError(
+            "Input can only be an integer, float, numpy array or a torch tensor. Undefined type!"
+        )
 
 
 def check_small_negative_eigenval(
-    eigenvals: NDArray | torch.Tensor | Sequence[float],
+    eigenvals: NDArray | torch.Tensor | list[float],
     tolerance: float = 1e-3,
-) -> NDArray | torch.Tensor | Sequence[float]:
+) -> NDArray | torch.Tensor | list[float]:
     """
     Sweeps all eigenvalues and sets very small negative eigenvalues to 0 (since they are due to numeric errors).
 
@@ -164,9 +172,14 @@ def check_cos_output(
 
     # NumPy array
     if isinstance(cos_val, np.ndarray):
-        if abs(cos_val) > 1:
-            if abs(cos_val[0]) - 1 <= epsilon:
-                cos_val[0] = np.sign(cos_val[0]) * 1.0
+        if cos_val.ndim == 0:
+            if abs(cos_val) > 1 and abs(cos_val) - 1 <= epsilon:
+                cos_val[()] = np.sign(cos_val[()]) * 1.0
+                cos_val = np.array(cos_val)
+        else:
+            if abs(cos_val) > 1:
+                if abs(cos_val[0]) - 1 <= epsilon:
+                    cos_val[0] = np.sign(cos_val[0]) * 1.0
         return cos_val
 
     # Torch tensor

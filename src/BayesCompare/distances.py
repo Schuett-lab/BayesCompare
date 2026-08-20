@@ -134,7 +134,7 @@ def _hellinger_torch(
     Computes the Hellinger (Jeffreys-Matusita) distance between two multivariate normal distributions with means mu1, mu2 and covariances sigma1, sigma2.
     Implementation based on Pardo (2018).
     """
-    d_B = _bhattacharyya_torch(sigma1, sigma2, mu1, mu2)
+    d_B = torch.tensor(_bhattacharyya_torch(sigma1, sigma2, mu1, mu2))
     d_sq = 1 - torch.exp(-d_B)
     d_sq = check_small_negative(d_sq)
 
