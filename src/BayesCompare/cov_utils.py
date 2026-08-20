@@ -55,7 +55,10 @@ def cov_sigma(
     module = check_input_format(cov)
 
     if img_weights is not None:
-        cov_sigma = signal_var * cov + noise_var * np.diag(1 / img_weights)
+        img_weights = (
+            torch.Tensor(img_weights) if isinstance(cov, torch.Tensor) else img_weights
+        )
+        cov_sigma = signal_var * cov + noise_var * module.diag(1 / img_weights)
     else:
         cov_sigma = signal_var * cov + noise_var * module.eye(
             cov.shape[0], device=cov.device
@@ -267,7 +270,7 @@ def check_and_change_input_format(
                 raise ValueError("Covariance tensor has to have more than 1 matrix.")
             if d1 != d2:
                 raise ValueError(
-                    f"Expected shape (N, dim, dim), but got {input.shape}: "
+                    f"Expected shape (N, dim, dim), but got {tuple(input.shape)}: "
                     "last two dimensions must be equal."
                 )
             module = check_input_format(input)
