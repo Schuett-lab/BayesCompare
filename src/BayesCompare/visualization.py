@@ -1,21 +1,60 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+from typing import List, Optional
+from numpy.typing import NDArray
+
 
 def logpost_plot(
-    log_post,
-    model_names,
-    roi,
-    save_path=None,
-    filename="logpost",
-    file_ext="svg",
-    bayes_method=None,
-    extra_title=None,
+    log_post: NDArray,
+    model_names: List[str],
+    save_path: Optional[str] = None,
+    filename: str = "logpost",
+    file_ext: str = "svg",
+    roi: Optional[str] = None,
+    bayes_method: Optional[str] = None,
+    extra_title: Optional[str] = None,
 ):
+    """
+    Display and optionally save a plot of the posterior over models for a given
+    set of brain data.
+
+    Parameters
+    ----------
+
+    log_post: NDArray
+        Log posterior results from BayesCompare analysis. Expected shape is
+        (n_voxels, n_models)
+
+    model_names: List of str
+        List containing the model names in the order as they are indexed in
+        log_post
+
+    save_path: str or None, default None
+        Path to save the figure to
+
+    filename: str, default="logpost"
+        Only used if save_path is provided
+
+    file_ext: str, default="svg"
+        Used in case of saving
+
+    roi: str or None, default=None
+        Name of the area(s) that the data representa. Used for filename in case
+        of saving
+
+    bayes_method: str or None, default=None
+        Optional string for different analysis methods in filename. Only used
+        when saving
+
+    extra_title: str or None, default=None
+        String attached at the end of the figure title, useful to include things
+        like subject number, ROI name, etc.
+    """
     n_models = len(model_names)
     plt.figure(figsize=(min(15, n_models * 3), n_models * 2))
     plt.axes((0.1, 0.1, 0.8, 0.55))
-    plt.boxplot(log_post, whis=[0, 100])
+    plt.boxplot(log_post, whis=(0, 100))
     plt.xlim(0, len(model_names) + 1)
     plt.gca().spines["top"].set_visible(False)
     plt.gca().spines["right"].set_visible(False)
