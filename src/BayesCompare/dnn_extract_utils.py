@@ -36,10 +36,17 @@ def check_act_dims(
 
     Raises
     ------
+    ValueError
+        If number of dimensions of the activation tensor is 1.
     UserWarning
         If N is not found in any dimension of the activation tensor.
     """
     shape = list(act.shape)
+
+    if len(shape) <= 1:
+        raise ValueError(
+            "Activations cannot be one dimensional arrays! Please check the input activations."
+        )
 
     if shape[0] == N:
         activations = act
@@ -116,7 +123,7 @@ def create_covs_dict(
     layer_names: List[str],
     compute_covs: bool,
     flatten_acts: bool,
-    save_network_output: bool,
+    save_network_output: bool = False,
 ) -> dict:
     """
     Creates a dict of covariances/activations from the trace object
@@ -137,7 +144,7 @@ def create_covs_dict(
     return covs_dict
 
 
-def get_model_device_dtype(model: torch.nn.Module):
+def get_model_device_dtype(model: torch.nn.Module) -> tuple[torch.device, torch.dtype]:
     """Finds on which device a model is and with which datatype a model works"""
     try:
         p = next(model.parameters())
@@ -165,6 +172,9 @@ def make_mock_input(
         if module is model:
             continue
 
+        if batch_size is None:
+            batch_size = 1
+
         if isinstance(module, torch.nn.Linear):
             return torch.randn(
                 batch_size, module.in_features, device=device, dtype=dtype
@@ -185,7 +195,7 @@ def make_mock_input(
                 batch_size, module.in_channels, 16, 224, 224, device=device, dtype=dtype
             )
 
-    raise ValueError(
+    raise NotImplementedError(
         "Could not infer a valid input shape. Please provide input_shape explicitly."
     )
 
