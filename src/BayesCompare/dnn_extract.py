@@ -65,6 +65,7 @@ def cov_extractor(
     gradient: bool = False,
     eval_mode: bool = True,
     inference_mode: bool = True,
+    save_network_output: bool = False,
     flatten_acts: bool = False,
 ) -> dict:
     """
@@ -88,7 +89,7 @@ def cov_extractor(
         If True, compute and return covariance matrices of the saved layer
         outputs. If False, return the raw activations instead.
     gradient : bool, default False
-        If True, run the model in a gradient‑enabled setting. Obtained activations/covariances are attached to the graph
+        If True, run the model in a gradient enabled setting. Obtained activations/covariances are attached to the graph
         for further backpropagation. This forces `eval_mode=False` and `inference_mode=False` regardless of their input values.
         If False, the function uses `eval_mode` and `inference_mode` as provided.
     eval_mode : bool, default True
@@ -97,6 +98,8 @@ def cov_extractor(
     inference_mode : bool, defalt True
         Whether to run the forward pass inside `torch.inference_mode()` for improved performance and disabled gradient tracking.
         This argument is ignored (internally forced to False) when `gradient=True`.
+    save_network_output: bool, default False
+        Whether to save the output of the network.
     flatten_acts : bool, default False
         When True, extracted activations are flattened to have dimensions (N, C*H*W) instead of (N, C, H, W).
         Considered only when `compute_covs=False`.
@@ -138,6 +141,9 @@ def cov_extractor(
         out_transform = None
         save_raw_outs = True
 
+    if save_network_output:
+        save_raw_outs = True
+
     if eval_mode:
         model.eval()
 
@@ -149,6 +155,7 @@ def cov_extractor(
         random_seed=random_seed,
         backward_ready=backward_ready,
         save_raw_outs=save_raw_outs,
+        save_raw_output=save_network_output,
     )
 
     if inference_mode:
@@ -157,7 +164,9 @@ def cov_extractor(
     else:
         trace = tl.trace(**trace_kwargs)
 
-    return create_covs_dict(trace, layer_list, compute_covs, flatten_acts)
+    return create_covs_dict(
+        trace, layer_list, compute_covs, flatten_acts, save_network_output
+    )
 
 
 def act_extractor_batch(

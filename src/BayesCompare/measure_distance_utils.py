@@ -5,11 +5,17 @@ import h5py
 import tqdm
 import pickle
 
-from .distances import REGISTRY
-from .cov_utils import check_input_format
+from .distances import REGISTRY, SIMILARITIES
+from .cov_utils import (
+    check_input_format,
+    cov_trace_norm_sigma_N,
+    trace_norm_N,
+    cov_sigma_N,
+)
 from .dist_utils import simplify_string
 
-from typing import Optional, Callable
+from multiprocessing.queues import Queue
+from typing import Optional, Callable, Sequence
 from numpy.typing import NDArray
 from types import ModuleType
 
@@ -18,11 +24,7 @@ def select_measure(
     cov_mtx: NDArray | torch.Tensor, meas_name: str, module: Optional[ModuleType] = None
 ) -> Callable:
     """
-    Select and return the appropriate distance measure function based on input covariances and measure name.
-
-    Selects a distance/similarity measure function that is compatible with
-    the given covariance matrix type (NumPy array or PyTorch tensor) and the specified
-    metric name.
+    Select and return the appropriate distance measure function based on input covariances type (NumPy array or PyTorch tensor) and measure name.
 
     Parameters
     ----------
@@ -77,11 +79,16 @@ def select_measure(
     return measure
 
 
-def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
+def check_saved_hdf(
+    hdf_dir: str, N: int, covs_filename: str, measure_name: str
+) -> tuple[Sequence[tuple[int, int]], str]:
     """
-    Checks if an HDF5 file exists. if it doesn't creates it.
-    Returns the HDF5 filename and empty indices of the distance matrix inside the HDF5 file.
+    Checks if the distance matrix for the given measure and covariance filename already exists in the specified directory.
+    If it exists, it identifies which pairwise distances are still missing (NaN) and returns their indices.
+    If it does not exist, it creates a new HDF5 file with the appropriate structure and returns the indices for all pairwise
+    distances that need to be computed.
     """
+    # Check whether the folder exists
     if not os.path.exists(hdf_dir):
         os.makedirs(hdf_dir)
 
@@ -90,7 +97,12 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
     # convention for the name of the distance HDF5 files is: dist_<covs_list_filename>_<measure_name>.hdf5
     measure_name = simplify_string(measure_name)
     hdf_filename = (
-        os.path.join(hdf_dir, "") + "dist_" + covs_name + "_" + measure_name + ".hdf5"
+        os.path.join(hdf_dir, "")
+        + "dist_"
+        + covs_filename
+        + "_"
+        + measure_name
+        + ".hdf5"
     )
 
     if os.path.exists(hdf_filename):
@@ -107,7 +119,10 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
         with h5py.File(hdf_filename, "w") as f:
             init_mtx = np.empty((N, N))
             init_mtx[:] = np.nan
-            np.fill_diagonal(init_mtx, 0)
+            if measure_name in SIMILARITIES:
+                np.fill_diagonal(init_mtx, 1)
+            else:
+                np.fill_diagonal(init_mtx, 0)
 
             dist_dset = f.create_dataset("dist", shape=(N, N), data=init_mtx)
             indices = [(i, j) for j in range(N) for i in range(j + 1, N)]
@@ -117,11 +132,13 @@ def check_saved_hdf(hdf_dir, N, covs_name, measure_name):
     return indices, hdf_filename
 
 
-def writer(file_dir, que, total_num_ops):
+def writer(file_dir: str, que: Queue, total_num_ops: int) -> None:
     """
-    Writer worker used by the parallel distance computing function `measure_dist_parallel`
+    Writer process that listens to a queue for computed distance values and writes them to an HDF5 file.
+    It updates a progress bar as it writes the values.
     """
     progress_bar = tqdm.tqdm(total=int(total_num_ops))
+
     with h5py.File(file_dir, "r+") as f:
         res_dset = f["dist"]
         while 1:
@@ -136,9 +153,10 @@ def writer(file_dir, que, total_num_ops):
             progress_bar.update(1)
 
 
-def load_covs(full_filename):
+def load_covs(full_filename: str) -> tuple[NDArray | torch.Tensor, str]:
     """
-    Function that loads covariances from the .npy or .pickle files
+    Loads covariance matrices from a specified file. Supports .pkl, .pickle, .np, .npy, and .npz formats.
+    Returns the loaded covariance matrices and the base filename (without extension) for use in naming output files.
     """
     _, ext = os.path.splitext(full_filename)
     pckl_exts = {".pkl", ".pickle"}
@@ -160,8 +178,13 @@ def load_covs(full_filename):
             covs = covs.reshape(
                 covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3]
             )
+        elif isinstance(covs_loaded, list) and isinstance(covs_loaded[0], np.ndarray):
+            covs = np.array(covs_loaded)
 
         elif isinstance(covs_loaded, np.ndarray):
+            covs = covs_loaded
+
+        elif isinstance(covs_loaded, torch.Tensor):
             covs = covs_loaded
 
     elif ext in numpy_exts:
@@ -170,4 +193,135 @@ def load_covs(full_filename):
 
         covs = np.load(full_filename)
 
+    else:
+        raise ValueError(
+            f"Expected one of the following extensions: .pkl, .pickle, .np, .npy, .npz, got {ext}"
+        )
+
     return covs, filename
+
+
+def preprocess_input_covs(
+    covs: NDArray | torch.Tensor | Sequence[NDArray | torch.Tensor],
+    noise_var: Optional[float] = None,
+    b: float = 0.01,
+    normalize: bool = True,
+) -> NDArray | torch.Tensor | Sequence[NDArray | torch.Tensor]:
+    """
+    Applies specified preprocessing steps to covariances:
+    trace normalization, and noise addition using either noise_var or b
+    """
+    # normalize and add noise
+    if normalize and (b != 0 or noise_var):
+        if noise_var == None:  # if noise_var was not given but b is given
+            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+            noise_var = dim * b / (1 + (dim * b))
+
+        covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
+
+    # normalize but don't add noise
+    elif normalize and not (b) and not (noise_var):
+        covs = trace_norm_N(covs)
+
+    # don't normalize but add noise
+    elif not (normalize) and (b != 0 or noise_var):
+        if noise_var == None:  # if noise_var was not given but b is given
+            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
+            noise_var = dim * b / (1 + (dim * b))
+
+        covs = cov_sigma_N(covs, noise_var=noise_var)
+
+    return covs
+
+
+def get_preprocessing_params(
+    meas_name: str | Sequence[str],
+    b: float | Sequence[float],
+    noise_var: None | float | Sequence[float] = None,
+    normalize: bool | Sequence[bool] = True,
+) -> tuple[Sequence[str], Sequence[float], Sequence[float], Sequence[bool]]:
+    """
+    Converts required preprocessing parameters into lists.
+    """
+    if isinstance(meas_name, str):
+        meas_name = [meas_name]
+
+        if isinstance(b, float):
+            b_list = [b]
+        else:
+            raise TypeError(
+                f"When single measure name is given, `b` can only be a float! Given b type is {type(b)}"
+            )
+
+        if isinstance(noise_var, float):
+            noise_var_list = [noise_var]
+        elif noise_var is None:
+            noise_var_list = None
+        else:
+            raise TypeError(
+                f"When single measure name is given, `noise_var` can only be a float! Given noise_var type is {type(noise_var)}"
+            )
+
+        if isinstance(normalize, bool):
+            normalize_list = [normalize]
+        else:
+            raise TypeError(
+                f"When single measure name is given, `normalize` can only be a bool! Given normalize type is {type(normalize)}"
+            )
+
+    elif isinstance(meas_name, list):
+        if not (isinstance(meas_name[0], str)):
+            raise TypeError(
+                f"Measure name can either be a string or a list of strings! Given measure_name type is a list of {type(meas_name[0])}"
+            )
+
+        if isinstance(b, float):
+            b_list = [b] * len(meas_name)
+        elif isinstance(b, list):
+            if isinstance(b[0], float):
+                b_list = b
+            else:
+                raise TypeError(
+                    f"`b` can either be a float or a list of floats! Given b type is {type(b)}"
+                )
+        else:
+            raise TypeError(
+                f"`b` can either be a float or a list of floats! Given b type is {type(b)}"
+            )
+
+        if isinstance(noise_var, float):
+            noise_var_list = [noise_var] * len(meas_name)
+        elif isinstance(noise_var, list):
+            if isinstance(noise_var[0], float):
+                noise_var_list = noise_var
+            else:
+                raise TypeError(
+                    f"`noise_var` can either be a float or a list of floats! Given noise_var type is {type(noise_var)}"
+                )
+        elif noise_var is None:
+            noise_var_list = None
+        else:
+            raise TypeError(
+                f"`noise_var` can either be a float or a list of floats! Given noise_var type is {type(noise_var)}"
+            )
+
+        if isinstance(normalize, bool):
+            normalize_list = [normalize] * len(meas_name)
+        elif isinstance(normalize, list):
+            if isinstance(normalize[0], bool):
+                normalize_list = normalize
+            else:
+                raise TypeError(
+                    f"`normalize` can either be a bool or a list of bools! Given normalize type is {type(normalize)}"
+                )
+        else:
+            raise TypeError(
+                f"`normalize` can either be a bool or a list of bools! Given normalize type is {type(normalize)}"
+            )
+
+    else:
+        raise TypeError(
+            f"Measure name cannot be {type(meas_name)}. It can either be a string or a list of strings."
+        )
+
+    return meas_name, b_list, noise_var_list, normalize_list

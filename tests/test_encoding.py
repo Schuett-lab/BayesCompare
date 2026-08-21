@@ -10,7 +10,7 @@ import pathlib
 import numpy as np
 from numpy.testing import assert_almost_equal
 
-from BayesCompare.inference import loglik_score, log_posterior
+from BayesCompare.encoding import loglik_score, log_posterior
 
 
 def read_sample_file(file_path):

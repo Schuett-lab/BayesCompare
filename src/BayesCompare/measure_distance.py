@@ -1,3 +1,9 @@
+"""
+Module for camputing distances between prior predictive distributions (BayesCompare measures)
+or existing representational similarity measures in the literature computed with second moment matrix in parallel.
+Authors: Sezan Oral
+"""
+
 import numpy as np
 import torch
 import tqdm
@@ -9,16 +15,21 @@ from BayesCompare.dist_utils import (
     simplify_string,
 )
 from .cov_utils import (
-    cov_trace_norm_sigma_N,
     check_cov_symmetry,
     check_and_change_input_format,
-    trace_norm_N,
-    cov_sigma_N,
 )
-from .measure_distance_utils import select_measure, load_covs, check_saved_hdf, writer
+from .measure_distance_utils import (
+    select_measure,
+    load_covs,
+    check_saved_hdf,
+    writer,
+    preprocess_input_covs,
+    get_preprocessing_params,
+)
+from .distances import SIMILARITIES
 
 from numpy.typing import NDArray
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence
 
 
 def measure_dist(
@@ -26,7 +37,7 @@ def measure_dist(
     mean: Optional[NDArray | torch.Tensor | Sequence[int]] = None,
     meas_name: str = "TVD",
     noise_var: Optional[float] = None,
-    b: float = 0.0,
+    b: float = 0.01,
     normalize: bool = True,
     samples_jsd_tvd: int = 10000,
     lmbd: Optional[float] = None,
@@ -38,8 +49,8 @@ def measure_dist(
     Compute a symmetric pairwise distance matrix from the list of covariance matrices and optionally mean vectors.
 
     It expects covariances matrices to be symmetric and positive semi-definite.
-    It trace-normalizes the covariance matrices to have trace equals to N (dimension of the square matrix) by default and
-    converts covariance arrays into a list of square matrices.
+    It trace-normalizes the covariance matrices to have trace equals to N (dimension of the square matrix) and adds noise variance using b=0.01 by default and
+    converts covariance arrays into a list of square matrices. If you want to use the raw covariance matrices, set `normalize=False` and `b=0`.
 
     Parameters
     ----------
@@ -54,13 +65,17 @@ def measure_dist(
         If None, and a `b` value is provided, then noise_var is computed from the number of images (dim)
         used to obtain the cov matrix and the parameter `b` using the formula
         noise_var = (dim * b) / (1 + (dim * b)).
-        It overwrites b if both is provided. Default is None.
+        It overwrites b if both noise_var and b is provided. Default is None.
     b : float, optional
-        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.
+        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.01.
     normalize : bool, optional
         Flag for selecting to apply trace normalization or not. Defaults to True (normalization is applied by default).
     samples_jsd_tvd : integer, optional
         Number of samples used for computing JSD and TVD measures. Defaults to 10000.
+    lmbd : float, optional
+        Lambda parameter for the GULP distance.
+    k : integer, optional
+        k parameter for determining the k-nearest neighbors for computing Jaccard similarity.
     generator: np.random.Generator or torch.Generator, optional
         A Generator object for the randomization for generating samples for JSD and TVD computations. Default is None.
     show_progress : bool, optional
@@ -79,25 +94,12 @@ def measure_dist(
     >>> # Given a list of covariance matrices `cov_list`
     >>> dist_matrix = measure_dist(cov_list, meas_name="TVD")
     """
-    # normalize and add noise
-    if normalize and (b != 0 or noise_var):
-        if noise_var == None:  # if noise_var was not given but b is given
-            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
-            noise_var = dim * b / (1 + (dim * b))
-
-        covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
-
-    # normalize but don't add noise
-    elif normalize and not (b) and not (noise_var):
-        covs = trace_norm_N(covs)
-
-    # don't normalize but add noise
-    elif not (normalize) and (b != 0 or noise_var):
-        if noise_var == None:  # if noise_var was not given but b is given
-            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
-            noise_var = dim * b / (1 + (dim * b))
-
-        covs = cov_sigma_N(covs, noise_var=noise_var)
+    covs = preprocess_input_covs(
+        covs,
+        b=b,
+        noise_var=noise_var,
+        normalize=normalize,
+    )
 
     covs, N, module = check_and_change_input_format(covs)
 
@@ -112,6 +114,11 @@ def measure_dist(
     measure = select_measure(covs[0], meas_name, module=module)
 
     dist = module.zeros((N, N))
+    if meas_name in SIMILARITIES:
+        if module is torch:
+            dist.fill_diagonal_(1)
+        else:
+            module.fill_diagonal(dist, 1)
 
     progress_bar = tqdm.tqdm(total=int((N * (N - 1)) / 2), disable=not show_progress)
 
@@ -137,23 +144,20 @@ def measure_dist(
     return dist
 
 
-## Helper functions
-
-
 def measure_dist_parallel(
     covs_dir: str,
     output_dir: str,
-    mean=None,
-    meas_name: Sequence[str] = ["TVD"],
-    noise_var: Optional[float] = None,
-    b: float = 0.0,
-    normalize: bool = True,
+    mean: Optional[str] = None,
+    meas_name: str | Sequence[str] = ["TVD"],
+    noise_var: Optional[float | Sequence[float]] = None,
+    b: float | Sequence[float] = 0.01,
+    normalize: bool | Sequence[bool] = True,
     samples_jsd_tvd: int = 10000,
     lmbd: Optional[float] = None,
     k: Optional[int] = None,
-    generator: Optional[Union[np.random.Generator, torch.Generator]] = None,
+    generator: Optional[np.random.Generator | torch.Generator] = None,
     num_workers: int = mp.cpu_count() - 1,
-):
+) -> None:
     """
     Compute pairwise distances between covariance matrices in parallel and save results to disk.
 
@@ -163,33 +167,42 @@ def measure_dist_parallel(
     reused: when an output HDF already contains the requested entries, computation for those
     pairs is skipped.
 
+    Important: By default, function trace-normalizes and adds noise to the covariance matrices. If you want to use the raw covariance matrices, set `normalize=False` and `b=0`.
+
     Parameters
     ----------
     covs_dir : str
-        Path to the directory (or file) containing the covariance matrices to load. The
-        helper function `load_covs` is used to read covariances and associated filenames.
+        Path to the directory (or file) containing the covariance matrices to load.
+        Supports .pkl, .pickle, .np, .npy, and .npz formats.
     output_dir : str
         Directory where computed distance matrices (HDF files) will be stored. The helper
         `check_saved_hdf` is used to determine an output filename and which pair indices
         still need to be computed.
-    mean : optional
-        Mean vector.
-    meas_name : str or sequence of str, optional
+    mean : str, optional
+        Path to the directory (or file) containing the mean vectors to be load.
+    meas_name : str or sequence of str
         Name of the distance measure to compute (e.g. "TVD") or a list/tuple of measure
         names. Each name is resolved to a callable via `dist.select_measure`. Default is
         "TVD".
-    noise_var : float, optional
-        Noise variance to be applied in the normalization if the matrices are not already normalized.
-        If None, noise_var is computed from the number of images (dim) used to obtain the cov matrix and
-        the parameter `b` using the formula
+    noise_var : float or list of floats, optional
+        Additive noise variance to be added to the covariance matrices.
+        When `meas_name` is a list of metrics, `noise_var` can also be specified as a list with the same length for each metric.
+        If None, and a `b` value is provided, then noise_var is computed from the number of images (dim)
+        used to obtain the cov matrix and the parameter `b` using the formula
         noise_var = (dim * b) / (1 + (dim * b)).
         It overwrites b if both is provided. Default is None.
     b : float, optional
-        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.
+        Scalar used to compute a default `noise_var` when `noise_var` is None. Default is 0.01.
+        When `meas_name` is a list of metrics, `b` can also be specified as a list with the same length for each metric.
     normalize : bool, optional
         Flag for selecting to apply trace normalization or not. Defaults to True (normalization is applied by default).
+        When `meas_name` is a list of metrics, `normalize` can also be specified as a list with the same length for each metric.
     samples_jsd_tvd : integer, optional
         Number of samples used for computing JSD and TVD measures. Defaults to 10000.
+    lmbd : float, optional
+        Lambda parameter for the GULP distance.
+    k : integer, optional
+        k parameter for determining the k-nearest neighbors for computing Jaccard similarity.
     generator: np.random.Generator or torch.Generator, optional
         A Generator object for the randomization for generating samples for JSD and TVD computations. Default is None.
     num_workers : int, optional
@@ -220,55 +233,45 @@ def measure_dist_parallel(
     Compute several measures:
     >>> measure_dist_parallel("/covs.npy", "/out", meas_name=["TVD", "JSD"], num_workers=8)
     """
-
     # check if a single string or a list of strings is given in the meas_name
-    if isinstance(meas_name, str):
-        meas_name = [meas_name]
+    meas_name, b_list, noise_var_list, normalize_list = get_preprocessing_params(
+        meas_name, b, noise_var, normalize
+    )
 
-    covs, covs_filename = load_covs(covs_dir)
+    for meas_idx, name in enumerate(meas_name):
 
-    idx = np.random.randint(len(covs))
+        covs, covs_filename = load_covs(covs_dir)
 
-    # normalize and add noise
-    if normalize and (b != 0 or noise_var):
+        if noise_var:
+            covs = preprocess_input_covs(
+                covs,
+                b=b_list[meas_idx],
+                noise_var=noise_var_list[meas_idx],
+                normalize=normalize_list[meas_idx],
+            )
+        else:
+            covs = preprocess_input_covs(
+                covs,
+                b=b_list[meas_idx],
+                noise_var=None,
+                normalize=normalize_list[meas_idx],
+            )
 
-        if noise_var == None:  # if noise_var was not given but b is given
-            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
-            noise_var = dim * b / (1 + (dim * b))
-
-        covs = cov_trace_norm_sigma_N(covs, noise_var=noise_var)
-
-    # normalize but don't add noise
-    elif normalize and not (b) and not (noise_var):
-
-        covs = trace_norm_N(covs)
-
-    # don't normalize but add noise
-    elif not (normalize) and (b != 0 or noise_var):
-
-        if noise_var == None:  # if noise_var was not given but b is given
-            dim = covs[0].shape[0]  # number of images used for obtaining one cov matrix
-            noise_var = dim * b / (1 + (dim * b))
-
-        covs = cov_sigma_N(covs, noise_var=noise_var)
-
-    symmetric = check_cov_symmetry(covs[idx])
-    if not symmetric:
-        raise ValueError(
-            f"Covariance matrices should be symmetric! The covariance matrix at index {idx} violates this condition."
-        )
-
-    N = len(covs)
-
-    for name in meas_name:
+        N = len(covs)
+        idx = np.random.randint(N)
+        symmetric = check_cov_symmetry(covs[idx])
+        if not symmetric:
+            raise ValueError(
+                f"Covariance matrices should be symmetric! The covariance matrix at index {idx} violates this condition."
+            )
 
         measure = select_measure(covs[0], name)
-
-        indices, output_filename = check_saved_hdf(output_dir, N, covs_filename, name)
+        indices, output_filename = check_saved_hdf(
+            output_dir, N, covs_filename, simplify_string(name)
+        )
 
         if len(indices) == 0:
             print("Distance already calculated")
-
         else:
             with mp.Manager() as manager:
 

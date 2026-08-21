@@ -50,6 +50,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+cov.xml
 
 # Translations
 *.mo
@@ -163,3 +164,6 @@ cython_debug/
 
 # Mac
 .DS_store
+
+# Data from examples
+examples/encoding_data/*

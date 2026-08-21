@@ -46,3 +46,5 @@ test-requires = "pytest"
 test-command = "pytest {project}/tests"
 before-test = "pip install -r tests/requirements.txt"
 
+[tool.coverage.run]
+relative-files = true
