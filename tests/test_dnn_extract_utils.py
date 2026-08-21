@@ -364,6 +364,10 @@ class TestGetModelDeviceDtype:
         assert res_device == torch.device("cpu")
         assert res_dtype is dtype
 
+    @pytest.mark.skipif(
+        not torch.cuda.is_available(),
+        reason="CUDA GPU is not available",
+    )
     @pytest.mark.parametrize(
         "dtype",
         [

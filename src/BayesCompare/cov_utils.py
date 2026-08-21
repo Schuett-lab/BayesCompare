@@ -97,9 +97,18 @@ def cov_sigma_N(
     if isinstance(covs, (list, tuple)):
         cov_sigma_out = []
         for cov in covs:
-            cov_sigma_out.append(
-                cov_sigma(cov, noise_var=noise_var, signal_var=signal_var)
-            )
+            if len(cov.shape) == 2:
+                cov_sigma_out.append(
+                    cov_sigma(cov, noise_var=noise_var, signal_var=signal_var)
+                )
+            elif len(cov.shape) == 3 and cov.shape[0] == 1:
+                cov_sigma_out.append(
+                    cov_sigma(cov[0, :, :], noise_var=noise_var, signal_var=signal_var)
+                )
+            else:
+                raise TypeError(
+                    "Input covariances appear to be a nested list. Please provide an input of a supported type."
+                )
 
     else:
         module = check_input_format(covs)
@@ -132,7 +141,14 @@ def trace_norm_N(
     if isinstance(covs, (list, tuple)):
         cov_norm = []
         for cov in covs:
-            cov_norm.append(trace_norm(cov))
+            if len(cov.shape) == 2:
+                cov_norm.append(trace_norm(cov))
+            elif len(cov.shape) == 3 and cov.shape[0] == 1:
+                cov_norm.append(trace_norm(cov[0, :, :]))
+            else:
+                raise TypeError(
+                    "Input covariances appear to be a nested list. Please provide an input of a supported type."
+                )
     else:
         module = check_input_format(covs)
 
