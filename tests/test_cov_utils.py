@@ -54,7 +54,7 @@ def inputs():
         filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
         file_ext = pathlib.Path(filename).suffix
 
-        if file_ext == ".npy":
+        if file_ext == ".np":
             sample_file = np.load(filename)
         elif file_ext == ".pt":
             sample_file = torch.load(filename)

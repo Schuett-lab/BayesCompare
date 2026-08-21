@@ -178,8 +178,13 @@ def load_covs(full_filename: str) -> tuple[NDArray | torch.Tensor, str]:
             covs = covs.reshape(
                 covs.shape[0] * covs.shape[1], covs.shape[2], covs.shape[3]
             )
+        elif isinstance(covs_loaded, list) and isinstance(covs_loaded[0], np.ndarray):
+            covs = np.array(covs_loaded)
 
         elif isinstance(covs_loaded, np.ndarray):
+            covs = covs_loaded
+
+        elif isinstance(covs_loaded, torch.Tensor):
             covs = covs_loaded
 
     elif ext in numpy_exts:
@@ -187,6 +192,11 @@ def load_covs(full_filename: str) -> tuple[NDArray | torch.Tensor, str]:
         filename, ext = os.path.splitext(filename_ext)
 
         covs = np.load(full_filename)
+
+    else:
+        raise ValueError(
+            f"Expected one of the following extensions: .pkl, .pickle, .np, .npy, .npz, got {ext}"
+        )
 
     return covs, filename
 
@@ -196,7 +206,7 @@ def preprocess_input_covs(
     noise_var: Optional[float] = None,
     b: float = 0.01,
     normalize: bool = True,
-):
+) -> NDArray | torch.Tensor | Sequence[NDArray | torch.Tensor]:
     """
     Applies specified preprocessing steps to covariances:
     trace normalization, and noise addition using either noise_var or b
@@ -224,7 +234,12 @@ def preprocess_input_covs(
     return covs
 
 
-def get_preprocessing_params(meas_name, b, noise_var, normalize):
+def get_preprocessing_params(
+    meas_name: str | Sequence[str],
+    b: float | Sequence[float],
+    noise_var: None | float | Sequence[float] = None,
+    normalize: bool | Sequence[bool] = True,
+) -> tuple[Sequence[str], Sequence[float], Sequence[float], Sequence[bool]]:
     """
     Converts required preprocessing parameters into lists.
     """
@@ -255,6 +270,10 @@ def get_preprocessing_params(meas_name, b, noise_var, normalize):
             )
 
     elif isinstance(meas_name, list):
+        if not (isinstance(meas_name[0], str)):
+            raise TypeError(
+                f"Measure name can either be a string or a list of strings! Given measure_name type is a list of {type(meas_name[0])}"
+            )
 
         if isinstance(b, float):
             b_list = [b] * len(meas_name)
