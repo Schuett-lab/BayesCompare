@@ -26,7 +26,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from BayesCompare import cov_extractor, cov_extractor_batch, get_layer_names
+from BayesCompare.dnn_extract import cov_extractor, cov_extractor_batch, get_layer_names
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

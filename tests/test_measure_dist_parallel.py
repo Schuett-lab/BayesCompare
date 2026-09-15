@@ -3,7 +3,7 @@ import os
 import h5py
 import pickle
 
-from BayesCompare import measure_dist, measure_dist_parallel
+from BayesCompare.measure_distance import measure_dist, measure_dist_parallel
 from BayesCompare.dist_utils import simplify_string
 
 from numpy.testing import assert_allclose
