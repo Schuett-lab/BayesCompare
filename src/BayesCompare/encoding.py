@@ -114,7 +114,7 @@ def loglik_score(
         Log-likelihood score for each measurement channel and candidate model
 
     """
-    # If no signal_var is passed, infer it from noise_var (which should be a single value)
+    # Decide operation mode based on the length of of noise_var
     if signal_var is None:
         assert isinstance(noise_var, float)
         single_noise_value = True
