@@ -42,7 +42,7 @@ def test_evidence_score_io():
 
     # Per-voxel noise
     model_scores = []
-    for cov in input_args["input_covs_norm"]:
+    for cov in input_args["evidence_covs_norm"]:
         model_score = loglik_score(
             norm_cov=cov,
             activations=input_args["input_y"],
@@ -55,7 +55,7 @@ def test_evidence_score_io():
 
     # Single noise value
     model_scores = []
-    for cov in input_args["input_covs_norm"]:
+    for cov in input_args["evidence_covs_norm"]:
         model_score = loglik_score(
             norm_cov=cov,
             activations=input_args["input_y"],
