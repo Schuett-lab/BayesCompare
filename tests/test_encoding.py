@@ -73,26 +73,25 @@ def test_loglik_score_correct_output_shape():
     sample_cov = np.eye(5)
     sample_y = np.random.uniform(size=(10, 5))
     sample_noisevar = np.random.uniform(size=(10,))
-    sample_signalvar = 1 - sample_noisevar
 
-    # Test with one variance per voxel
+    # Test with one variance per voxel (noise_var same shape as activations)
     expected_shape = sample_y.shape
     out = loglik_score(
         norm_cov=sample_cov,
         activations=sample_y,
         noise_var=sample_noisevar,
-        signal_var=sample_signalvar,
     )
     assert out.shape[0] == expected_shape[0]
 
-    # Test with single-noise value
+    # Test with multiple values for all voxels (noise_var different shape as activations)
+    n_var = 5
     out = loglik_score(
         norm_cov=sample_cov,
         activations=sample_y,
-        noise_var=sample_noisevar[0],
-        signal_var=None,
+        noise_var=sample_noisevar[:n_var],
     )
-    assert out.shape[0] == expected_shape[0]
+    expected_shape = (n_var, sample_y.shape[0])
+    assert out.shape == expected_shape[0]
 
 
 def test_posterior():
