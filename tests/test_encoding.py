@@ -91,7 +91,7 @@ def test_loglik_score_correct_output_shape():
         noise_var=sample_noisevar[:n_var],
     )
     expected_shape = (n_var, sample_y.shape[0])
-    assert out.shape == expected_shape[0]
+    assert out.shape == expected_shape
 
 
 def test_posterior():
