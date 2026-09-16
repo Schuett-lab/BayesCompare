@@ -85,6 +85,15 @@ def test_loglik_score_correct_output_shape():
     )
     assert out.shape[0] == expected_shape[0]
 
+    # Test with single-noise value
+    out = loglik_score(
+        norm_cov=sample_cov,
+        activations=sample_y,
+        noise_var=sample_noisevar[0],
+        signal_var=None,
+    )
+    assert out.shape[0] == expected_shape[0]
+
 
 def test_posterior():
     input = np.random.rand(50, 10, 2)  # (n_voxels, n_models, n_noise)
