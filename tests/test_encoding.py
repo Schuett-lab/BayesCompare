@@ -29,7 +29,7 @@ def read_sample_file(file_path):
 def test_evidence_score_io():
     sample_path = "tests/sample_data"
     input_args = {}
-    for input_file in ["input_y", "input_totvar", "input_epsvar", "input_covs_norm"]:
+    for input_file in ["input_y", "input_totvar", "input_epsvar", "evidence_covs_norm"]:
         print(os.getcwd(), os.path.join(sample_path, f"test_{input_file}*"))
         filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
         input_args[input_file] = read_sample_file(filename)
@@ -67,6 +67,23 @@ def test_evidence_score_io():
 
     assert_almost_equal(score_multinoise, expected_multinoise)
     assert_almost_equal(score_singlenoise, expected_singlenoise)
+
+
+def test_loglik_score_correct_output_shape():
+    sample_cov = np.eye(5)
+    sample_y = np.random.uniform(size=(10, 5))
+    sample_noisevar = np.random.uniform(size=(10,))
+    sample_signalvar = 1 - sample_noisevar
+
+    # Test with one variance per voxel
+    expected_shape = sample_y.shape
+    out = loglik_score(
+        norm_cov=sample_cov,
+        activations=sample_y,
+        noise_var=sample_noisevar,
+        signal_var=sample_signalvar,
+    )
+    assert out.shape[0] == expected_shape[0]
 
 
 def test_posterior():
