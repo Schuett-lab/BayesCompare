@@ -9,6 +9,7 @@ import pathlib
 
 import numpy as np
 from numpy.testing import assert_almost_equal
+from scipy.special import logsumexp
 
 from BayesCompare.encoding import loglik_score, log_posterior
 
@@ -59,10 +60,13 @@ def test_evidence_score_io():
         model_score = loglik_score(
             norm_cov=cov,
             activations=input_args["input_y"],
-            noise_var=0.8,
+            noise_var=np.array([0.8]),
             n_jobs=None,
         )
-        model_scores.append(model_score)
+        # Use logsumexp since any number of noise values other than the
+        # same number of voxels generates an extra last dimension over noise
+        # values
+        model_scores.append(logsumexp(model_score, axis=-1))
     score_singlenoise = np.stack(model_scores, axis=1)
 
     assert_almost_equal(score_multinoise, expected_multinoise)
@@ -71,8 +75,8 @@ def test_evidence_score_io():
 
 def test_loglik_score_correct_output_shape():
     sample_cov = np.eye(5)
-    sample_y = np.random.uniform(size=(10, 5))
-    sample_noisevar = np.random.uniform(size=(10,))
+    sample_y = np.random.uniform(size=(3, 5))
+    sample_noisevar = np.random.uniform(size=(3,))
 
     # Test with one variance per voxel (noise_var same shape as activations)
     expected_shape = sample_y.shape
@@ -84,13 +88,13 @@ def test_loglik_score_correct_output_shape():
     assert out.shape[0] == expected_shape[0]
 
     # Test with multiple values for all voxels (noise_var different shape as activations)
-    n_var = 5
+    n_var = 2
     out = loglik_score(
         norm_cov=sample_cov,
         activations=sample_y,
         noise_var=sample_noisevar[:n_var],
     )
-    expected_shape = (n_var, sample_y.shape[0])
+    expected_shape = (sample_y.shape[0], n_var)
     assert out.shape == expected_shape
 
 

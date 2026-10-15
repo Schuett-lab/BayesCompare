@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 
 from joblib import Parallel, delayed
@@ -69,8 +70,8 @@ def evidence(
 def loglik_score(
     norm_cov: NDArray,
     activations: NDArray,
-    noise_var: NDArray | float,
-    signal_var: Optional[NDArray | float] = None,
+    noise_var: NDArray,
+    signal_var: Optional[NDArray] = None,
     img_weights: Optional[NDArray] = None,
     n_jobs: int = -1,
 ) -> NDArray:
@@ -114,16 +115,26 @@ def loglik_score(
         Log-likelihood score for each measurement channel and candidate model
 
     """
-    # Decide operation mode based on the length of of noise_var
-    if signal_var is None:
-        assert isinstance(noise_var, float)
-        single_noise_value = True
+    # If noise var is the same length as the number of channels in activations,
+    # assume one noise value per channel. Otherwise map the number of noise values
+    # for all voxels
+    n_voxels = activations.shape[0]
+    n_noise = noise_var.shape[0]
+    if n_noise == n_voxels:
+        per_voxel_var = True
     else:
-        single_noise_value = False
+        per_voxel_var = False
 
-    def voxel_loop(norm_cov, y, sig_var, eps_var):
+    # In any case, optional signal_var must be the same shape as noise_var
+    if signal_var is not None:
+        assert signal_var.shape[0] == noise_var.shape[0]
+    else:
+        signal_var = np.full(shape=n_noise, fill_value=None)
+
+    def voxel_loop(
+        norm_cov, y, sig_var, eps_var, cov_inv=None, slogdet=None, img_weights=None
+    ):
         """Run evidence on one voxel and all models"""
-
         if cov_inv is not None:  # Uses the same cov for every voxel
             ev = evidence(norm_cov, y, cov_inv=cov_inv, slogdet=slogdet)
         else:  # Uses a different s_cov per voxel due to different noise values
@@ -134,32 +145,54 @@ def loglik_score(
 
         return ev.flatten()
 
-    if single_noise_value:  # Pre-compute cov_inv and slogdet to save time
+    if not per_voxel_var:
+        # Pre-compute cov_inv and slogdet to save time for every noise_var
+        cov_invs, slogdets = [], []
         N = len(activations[0])
-        s_cov = cov_sigma(
-            norm_cov,
-            signal_var=signal_var,
-            noise_var=noise_var,
-            img_weights=img_weights,
+        print(f"Pre-computing {n_noise} inverse matrices and log-determinants...")
+        for nvar, svar in zip(noise_var, signal_var):
+            s_cov = cov_sigma(
+                norm_cov,
+                signal_var=svar,
+                noise_var=nvar,
+                img_weights=img_weights,
+            )
+
+            cov_inv = np.linalg.inv(s_cov[:N, :N])
+            slogdet = np.linalg.slogdet(cov_inv)
+
+            cov_invs.append(cov_inv)
+            slogdets.append(slogdet)
+
+        # Create tasks with the product of noise_var and voxels
+        tasks = itertools.product(range(n_voxels), range(n_noise))
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(voxel_loop)(
+                norm_cov,
+                activations[i],
+                signal_var[j],
+                noise_var[j],
+                cov_inv=cov_invs[j],
+                slogdet=slogdets[j],
+                img_weights=None,
+            )
+            for i, j in tasks
         )
-        cov_inv = np.linalg.inv(s_cov[:N, :N])
-        slogdet = np.linalg.slogdet(cov_inv)
-        img_weights = None
-        model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
-            delayed(voxel_loop)(s_cov, y, signal_var, noise_var)
-            for y in tqdm(activations, total=activations.shape[0])
-        )
+
     else:
         cov_inv = None
         slogdet = None
-        model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
-            delayed(voxel_loop)(norm_cov, y, sig_var, eps_var)
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(voxel_loop)(norm_cov, y, sig_var, eps_var, img_weights)
             for y, sig_var, eps_var in tqdm(
                 zip(activations, signal_var, noise_var), total=activations.shape[0]
             )
         )  # All voxels, one layer
 
-    loglik_score = np.concatenate(model_scores)
+    loglik_score = np.concatenate(results)  # shape (n_voxels,) or (n_voxels * n_noise,)
+    if not per_voxel_var:
+        # Reshape model_scores to (n_voxels, n_noise)
+        loglik_score = loglik_score.reshape(n_voxels, n_noise)
 
     return loglik_score
 
