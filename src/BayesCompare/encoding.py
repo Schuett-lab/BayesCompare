@@ -1,3 +1,4 @@
+from functools import total_ordering
 import itertools
 import numpy as np
 
@@ -150,7 +151,7 @@ def loglik_score(
         cov_invs, slogdets = [], []
         N = len(activations[0])
         print(f"Pre-computing {n_noise} inverse matrices and log-determinants...")
-        for nvar, svar in zip(noise_var, signal_var):
+        for nvar, svar in tqdm(zip(noise_var, signal_var), total=noise_var.shape[0]):
             s_cov = cov_sigma(
                 norm_cov,
                 signal_var=svar,
@@ -176,7 +177,7 @@ def loglik_score(
                 slogdet=slogdets[j],
                 img_weights=None,
             )
-            for i, j in tasks
+            for i, j in tqdm(tasks, desc="Voxels * noise values")
         )
 
     else:
@@ -185,7 +186,9 @@ def loglik_score(
         results = Parallel(n_jobs=n_jobs)(
             delayed(voxel_loop)(norm_cov, y, sig_var, eps_var, img_weights)
             for y, sig_var, eps_var in tqdm(
-                zip(activations, signal_var, noise_var), total=activations.shape[0]
+                zip(activations, signal_var, noise_var),
+                total=activations.shape[0],
+                desc="Voxels",
             )
         )  # All voxels, one layer
 
