@@ -40,6 +40,66 @@ def _cka_torch(K1: torch.Tensor, K2: torch.Tensor) -> float:
     )
 
 
+def _rsa_cos_sim_spearman_np(K1: NDArray, K2: NDArray):
+    """RSA with cosine similarity, spearman rank correlation"""
+    d1 = _cov_to_cos_sim_np(K1)
+    d2 = _cov_to_cos_sim_np(K2)
+    idx = np.triu_indices(d1.shape[0], 1)
+    ranked_d1 = stats.rankdata(d1[idx], "average")
+    ranked_d2 = stats.rankdata(d2[idx], "average")
+    ranked_d1 = ranked_d1 - np.mean(ranked_d1)
+    ranked_d2 = ranked_d2 - np.mean(ranked_d2)
+    n = ranked_d1.shape[0]
+    rho_a = np.sum(ranked_d1 * ranked_d2) / (n**3 - n) * 12
+    return rho_a
+
+
+def _rsa_cos_sim_spearman_torch(K1: NDArray, K2: NDArray):
+    """RSA with cosine similarity, spearman rank correlation"""
+    d1 = _cov_to_cos_sim_torch(K1)
+    d2 = _cov_to_cos_sim_torch(K2)
+    idx = torch.triu_indices(d1.shape[0], d1.shape[0], 1)
+    triu_d1 = d1[idx[0], idx[1]]
+    triu_d2 = d2[idx[0], idx[1]]
+    ranked_d1 = torch.Tensor(stats.rankdata(triu_d1, "average"))
+    ranked_d2 = torch.Tensor(stats.rankdata(triu_d2, "average"))
+    ranked_d1 = ranked_d1 - torch.mean(ranked_d1)
+    ranked_d2 = ranked_d2 - torch.mean(ranked_d2)
+    n = ranked_d1.shape[0]
+    rho_a = torch.sum(ranked_d1 * ranked_d2) / (n**3 - n) * 12
+    return rho_a
+
+
+def _rsa_cos_sim_corr_np(K1: NDArray, K2: NDArray):
+    d1 = _cov_to_cos_sim_np(K1)
+    d2 = _cov_to_cos_sim_np(K2)
+    idx = np.triu_indices(d1.shape[0], 1)
+    d1[idx] -= np.mean(d1[idx])
+    d2[idx] -= np.mean(d2[idx])
+    corr_res = (
+        np.sum(d1[idx] * d2[idx])
+        / np.sqrt(np.sum(d1[idx] * d1[idx]))
+        / np.sqrt(np.sum(d2[idx] * d2[idx]))
+    )
+    return check_cos_output(corr_res)
+
+
+def _rsa_cos_sim_corr_torch(K1: NDArray, K2: NDArray):
+    d1 = _cov_to_cos_sim_torch(K1)
+    d2 = _cov_to_cos_sim_torch(K2)
+    idx = torch.triu_indices(d1.shape[0], d1.shape[0], 1)
+    triu_d1 = d1[idx[0], idx[1]]
+    triu_d1 = triu_d1 - triu_d1.mean()
+    triu_d2 = d2[idx[0], idx[1]]
+    triu_d2 = triu_d2 - triu_d2.mean()
+    corr_res = (
+        torch.sum(triu_d1 * triu_d2)
+        / torch.sqrt(torch.sum(triu_d1 * triu_d1))
+        / torch.sqrt(torch.sum(triu_d2 * triu_d2))
+    )
+    return check_cos_output(corr_res)
+
+
 def _rsa_corr_np(K1: NDArray, K2: NDArray):
     """RSA with euclidean distances, correlation similarity"""
     # conversion to distances

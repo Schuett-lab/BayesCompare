@@ -10,11 +10,20 @@ ALL_MEASURES = [
     "rsa_cos",
     "rsa_corr",
     "rsa_rank",
+    "rsa_cos_spearman",
+    "rsa_cos_sim_corr",
     "gulp",
     "dist_corr",
     "jaccard",
     "procrustes",
     "nbs",
+]
+
+corr_measures = [
+    "rsa_corr",
+    "rsa_rank",
+    "rsa_cos_spearman",
+    "rsa_cos_sim_corr",
 ]
 
 lmbd = 0.001
@@ -123,7 +132,7 @@ def test_large_scale_inputs(inputs, meas_name):
     output_th = torch.stack(output_th, dim=0)
 
     assert_allclose(output_np, output_th.numpy(), rtol=4e-2, atol=4e-2)
-    if meas_name == "rsa_corr" or meas_name == "rsa_rank":
+    if meas_name in corr_measures:
         assert np.all(
             abs(output_np) <= 1
         ), "RSA result NPArray cannot contain values greater than 1."
@@ -203,7 +212,7 @@ def test_small_scale_inputs(inputs, meas_name):
     output_th = torch.stack(output_th, dim=0)
 
     assert_allclose(output_np, output_th.numpy(), rtol=4e-2, atol=4e-2)
-    if meas_name == "rsa_corr" or meas_name == "rsa_rank":
+    if meas_name in corr_measures:
         assert np.all(
             abs(output_np) <= 1
         ), "RSA result NPArray cannot contain values greater than 1."
@@ -284,7 +293,7 @@ def test_large_and_small_scale_inputs(inputs, meas_name):
     output_th = torch.stack(output_th, dim=0)
 
     assert_allclose(output_np, output_th.numpy(), rtol=4e-2, atol=4e-2)
-    if meas_name == "rsa_corr" or meas_name == "rsa_rank":
+    if meas_name in corr_measures:
         assert np.all(
             abs(output_np) <= 1
         ), "RSA result NPArray cannot contain values greater than 1."
