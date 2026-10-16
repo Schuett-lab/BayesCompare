@@ -133,14 +133,29 @@ def loglik_score(
         signal_var = np.full(shape=n_noise, fill_value=None)
 
     def voxel_loop(
-        norm_cov, y, sig_var, eps_var, cov_inv=None, slogdet=None, img_weights=None
+        voxel_idx,
+        activations,
+        norm_cov,
+        sig_var,
+        eps_var,
+        cov_invs=None,
+        slogdets=None,
+        img_weights=None,
+        noise_idx=None,
     ):
         """Run evidence on one voxel and all models"""
-        if cov_inv is not None:  # Uses the same cov for every voxel
+        y = activations[voxel_idx]
+
+        if cov_invs is not None:  # Uses the same cov for every voxel
+            cov_inv = cov_invs[noise_idx]
+            slogdet = slogdets[noise_idx]
             ev = evidence(norm_cov, y, cov_inv=cov_inv, slogdet=slogdet)
         else:  # Uses a different s_cov per voxel due to different noise values
             s_cov = cov_sigma(
-                norm_cov, signal_var=sig_var, noise_var=eps_var, img_weights=img_weights
+                norm_cov,
+                signal_var=sig_var[voxel_idx],
+                noise_var=eps_var[voxel_idx],
+                img_weights=img_weights,
             )
             ev = evidence(s_cov, y)
 
@@ -165,32 +180,43 @@ def loglik_score(
             cov_invs.append(cov_inv)
             slogdets.append(slogdet)
 
+        # Make cov_invs an array for better Joblib management
+        cov_invs = np.array(cov_invs)
+
         # Create tasks with the product of noise_var and voxels
         tasks = itertools.product(range(n_voxels), range(n_noise))
         n_tasks = n_voxels * n_noise
         results = Parallel(n_jobs=n_jobs)(
             delayed(voxel_loop)(
+                voxel_idx,
+                activations,
                 norm_cov,
-                activations[i],
-                signal_var[j],
-                noise_var[j],
-                cov_inv=cov_invs[j],
-                slogdet=slogdets[j],
+                signal_var,
+                noise_var,
+                cov_invs=cov_invs,
+                slogdets=slogdets,
                 img_weights=None,
+                noise_idx=noise_idx,
             )
-            for i, j in tqdm(tasks, total=n_tasks, desc="Voxels * noise values")
+            for voxel_idx, noise_idx in tqdm(
+                tasks, total=n_tasks, desc="Voxels * noise values"
+            )
         )
 
     else:
         cov_inv = None
         slogdet = None
         results = Parallel(n_jobs=n_jobs)(
-            delayed(voxel_loop)(norm_cov, y, sig_var, eps_var, img_weights=img_weights)
-            for y, sig_var, eps_var in tqdm(
-                zip(activations, signal_var, noise_var),
-                total=activations.shape[0],
-                desc="Voxels",
+            delayed(voxel_loop)(
+                voxel_idx,
+                activations,
+                norm_cov,
+                signal_var,
+                noise_var,
+                img_weights=img_weights,
+                noise_idx=None,
             )
+            for voxel_idx in tqdm(range(n_voxels), desc="Voxels")
         )  # All voxels, one layer
 
     print(results)
