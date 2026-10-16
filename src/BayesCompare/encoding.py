@@ -148,7 +148,7 @@ def loglik_score(
 
     if not per_voxel_var:
         # Pre-compute cov_inv and slogdet to save time for every noise_var
-        inv_list, logdet_list = [], []
+        cov_invs, slogdets = [], []
         N = len(activations[0])
         print(f"Pre-computing {n_noise} inverse matrices and log-determinants...")
         for nvar, svar in tqdm(zip(noise_var, signal_var), total=noise_var.shape[0]):
@@ -162,15 +162,12 @@ def loglik_score(
             cov_inv = np.linalg.inv(s_cov[:N, :N])
             slogdet = np.linalg.slogdet(cov_inv)
 
-            inv_list.append(cov_inv)
-            logdet_list.append(slogdet)
-
-        # Make the covs and logdets arrays for joblib
-        cov_invs = np.array(inv_list)
-        slogdets = np.array(logdet_list)
+            cov_invs.append(cov_inv)
+            slogdets.append(slogdet)
 
         # Create tasks with the product of noise_var and voxels
         tasks = itertools.product(range(n_voxels), range(n_noise))
+        n_tasks = n_voxels * n_noise
         results = Parallel(n_jobs=n_jobs)(
             delayed(voxel_loop)(
                 norm_cov,
@@ -181,16 +178,14 @@ def loglik_score(
                 slogdet=slogdets[j],
                 img_weights=None,
             )
-            for i, j in tqdm(
-                tasks, total=len(list(tasks)), desc="Voxels * noise values"
-            )
+            for i, j in tqdm(tasks, total=n_tasks, desc="Voxels * noise values")
         )
 
     else:
         cov_inv = None
         slogdet = None
         results = Parallel(n_jobs=n_jobs)(
-            delayed(voxel_loop)(norm_cov, y, sig_var, eps_var, img_weights)
+            delayed(voxel_loop)(norm_cov, y, sig_var, eps_var, img_weights=img_weights)
             for y, sig_var, eps_var in tqdm(
                 zip(activations, signal_var, noise_var),
                 total=activations.shape[0],
@@ -198,6 +193,7 @@ def loglik_score(
             )
         )  # All voxels, one layer
 
+    print(results)
     loglik_score = np.concatenate(results)  # shape (n_voxels,) or (n_voxels * n_noise,)
     if not per_voxel_var:
         # Reshape model_scores to (n_voxels, n_noise)
