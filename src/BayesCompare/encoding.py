@@ -32,7 +32,7 @@ def evidence(
         It describes the covariance of the different experimental conditions
         with respect to the different measurement channels
 
-    y: NDArray, shape (n_stim,)
+    y: NDArray, shape (n_stim,) or (n_voxels, n_stim)
         Activation profile of a single measurement channel for each experimental
         condition. In the case of fMRI, it represents the activations of a
         single voxel across the space of experimental conditions or stimuli
@@ -52,17 +52,32 @@ def evidence(
     Returns
     -------
 
-    loglik: float
+    loglik: float or NDArray, shape (n_voxels,)
         Log likelihood that y is produced by the model corresponding to cov
 
     """
-    N = len(y)
+    N = y.shape[-1]
     inner_inv = np.linalg.inv(cov[:N, :N]) if cov_inv is None else cov_inv
     logdet = np.linalg.slogdet(inner_inv) if slogdet is None else slogdet
-    if mu is None:
-        ss = np.expand_dims(y, 0) @ inner_inv @ np.expand_dims(y, 1)
-    else:
-        ss = np.expand_dims(y - mu, 0) @ inner_inv @ np.expand_dims(y - mu, 1)
+
+    Y = np.atleast_2d(y)  # (n_voxels, n_stim) or (1, n_stim)
+    if mu is not None:
+        mu = np.asarray(mu)
+
+        # Handle mu shape for correct subtraction
+        if y.ndim == 1:  # Single voxel case
+            if mu.ndim != 0:
+                raise ValueError("Single voxel evidence: mu must be a scalar")
+        else:  # Multiple voxel case
+            if mu.ndim != 1:
+                raise ValueError(
+                    f"Multi-voxel evidence: mu must be a vector of length {y.shape[0]}"
+                )
+            mu = mu[:, None]
+
+        Y = Y - mu
+
+    ss = np.einsum("vi,vi->v", Y @ inner_inv, Y)  # y.T @ inner_inv @ y per voxel
 
     loglik = logdet.logabsdet / 2 - ss / 2 - N / 2 * np.log(2 * np.pi)
 
@@ -127,7 +142,6 @@ def loglik_score(
         signal/noise variance.
 
     """
-    n_voxels = activations.shape[0]
     n_noise = noise_var.shape[0]
 
     # Optional signal_var must be the same shape as noise_var
@@ -161,7 +175,7 @@ def loglik_score(
         return ev.flatten()
 
     if not noise_per_voxel:
-        results = Parallel(n_jobs=min(n_jobs, n_noise))(
+        results = Parallel(n_jobs=n_jobs)(
             delayed(noise_loop)(activations, norm_cov, sig_var, eps_var, img_weights)
             for sig_var, eps_var in tqdm(
                 zip(signal_var, noise_var), desc="Noise values"
