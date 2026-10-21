@@ -49,6 +49,7 @@ def test_evidence_score_io():
             activations=input_args["input_y"],
             signal_var=signal_var,
             noise_var=input_args["input_epsvar"],
+            noise_per_voxel=True,
             n_jobs=None,
         )
         model_scores.append(model_score)
@@ -61,6 +62,7 @@ def test_evidence_score_io():
             norm_cov=cov,
             activations=input_args["input_y"],
             noise_var=np.array([0.8]),
+            noise_per_voxel=False,
             n_jobs=None,
         )
         # Use logsumexp since any number of noise values other than the
@@ -84,6 +86,7 @@ def test_loglik_score_correct_output_shape():
         norm_cov=sample_cov,
         activations=sample_y,
         noise_var=sample_noisevar,
+        noise_per_voxel=True,
     )
     assert out.shape[0] == expected_shape[0]
 
@@ -93,6 +96,7 @@ def test_loglik_score_correct_output_shape():
         norm_cov=sample_cov,
         activations=sample_y,
         noise_var=sample_noisevar[:n_var],
+        noise_per_voxel=False,
     )
     expected_shape = (sample_y.shape[0], n_var)
     assert out.shape == expected_shape

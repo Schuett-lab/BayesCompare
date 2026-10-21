@@ -148,7 +148,7 @@ def loglik_score(
         img_weights=None,
         noise_idx=None,
     ):
-        """Run evidence on one voxel and all models"""
+        """Run evidence on one voxel and its matching signal/noise variance"""
         y = activations[voxel_idx]
 
         if cov_invs is not None:  # Uses the same cov for every voxel
