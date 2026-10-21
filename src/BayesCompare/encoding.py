@@ -16,10 +16,10 @@ from BayesCompare.cov_utils import cov_sigma
 def evidence(
     cov: NDArray,
     y: NDArray,
-    mu: Optional[NDArray] = None,
+    mu: Optional[NDArray | float] = None,
     cov_inv: Optional[NDArray] = None,
     slogdet: Optional[np.linalg._linalg.SlogdetResult] = None,
-) -> float:
+) -> float | NDArray:
     """
     Get the log-likelihood that a given model produces the activations observed
     from a certain observed measure (voxel or model)
@@ -37,8 +37,9 @@ def evidence(
         condition. In the case of fMRI, it represents the activations of a
         single voxel across the space of experimental conditions or stimuli
 
-    mu: NDArray or None, default None
-        Mean activation from the corresponding measurement channel
+    mu: float, NDArray or None, default None
+        Mean activation from the corresponding measurement channel. It must match
+        the shape of y: float for a single voxel, otherwise array of shape (n_voxels,)
 
     cov_inv: NDArray or None, default None
         The inner inverse of the covariance matrix. Certain variations of the
