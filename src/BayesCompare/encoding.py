@@ -186,16 +186,7 @@ def loglik_score(
 
         return ev.flatten()
 
-    if not noise_per_voxel:
-        results = Parallel(n_jobs=n_jobs)(
-            delayed(noise_loop)(activations, norm_cov, sig_var, eps_var, img_weights)
-            for sig_var, eps_var in tqdm(
-                zip(signal_var, noise_var), desc="Noise values"
-            )
-        )
-        loglik_score = np.stack(results, axis=1)  # shape (n_voxels, n_noise)
-    else:
-
+    if noise_per_voxel:
         results = Parallel(n_jobs=n_jobs)(
             delayed(voxel_loop)(y, norm_cov, sig_var, eps_var, img_weights)
             for y, sig_var, eps_var in tqdm(
@@ -203,6 +194,14 @@ def loglik_score(
             )
         )
         loglik_score = np.concatenate(results)  # shape (n_voxels,)
+    else:
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(noise_loop)(activations, norm_cov, sig_var, eps_var, img_weights)
+            for sig_var, eps_var in tqdm(
+                zip(signal_var, noise_var), desc="Noise values"
+            )
+        )
+        loglik_score = np.stack(results, axis=1)  # shape (n_voxels, n_noise)
 
     return loglik_score
 
