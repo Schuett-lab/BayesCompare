@@ -143,13 +143,24 @@ def loglik_score(
         signal/noise variance.
 
     """
+    n_voxels = activations.shape[0]
     n_noise = noise_var.shape[0]
 
-    # Optional signal_var must be the same shape as noise_var
+    # Input validation
     if signal_var is not None:
-        assert signal_var.shape[0] == noise_var.shape[0]
+        if signal_var.shape[0] != n_noise:
+            raise ValueError(
+                f"Signal var has len {signal_var.shape[0]} but noise var has "
+                f"shape {n_noise}"
+            )
     else:
         signal_var = np.full(shape=n_noise, fill_value=None)
+
+    if noise_per_voxel and n_noise != n_voxels:
+        raise ValueError(
+            "Parameter `noise_per_voxel` requires the shapes of `noise_var` and "
+            f"`activations` to match. Got {n_noise} and {n_voxels}"
+        )
 
     def noise_loop(activations, norm_cov, sig_var, eps_var, img_weights=None):
         """Run evidence for all voxels with the same signal/noise variance"""
@@ -184,6 +195,7 @@ def loglik_score(
         )
         loglik_score = np.stack(results, axis=1)  # shape (n_voxels, n_noise)
     else:
+
         results = Parallel(n_jobs=n_jobs)(
             delayed(voxel_loop)(y, norm_cov, sig_var, eps_var, img_weights)
             for y, sig_var, eps_var in tqdm(
