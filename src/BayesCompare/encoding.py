@@ -74,6 +74,7 @@ def loglik_score(
     noise_var: NDArray,
     signal_var: Optional[NDArray] = None,
     img_weights: Optional[NDArray] = None,
+    noise_per_voxel: bool = True,
     n_jobs: int = -1,
 ) -> NDArray:
     """
@@ -106,6 +107,14 @@ def loglik_score(
         data. This is used to weight the noise variance for each individual entry
         of the covariance matrix
 
+    noise_per_voxel: bool, default True
+        Controls the noise and signal variances are treated. If True, the function
+        expects noise (and optionally signal) variances to match the length of
+        activations, computing the log-likelihood of each voxel with its corresponding
+        noise and signal variances. If False, all voxels will be computed with each
+        value of the lists, resulting in len(noise_var) likelihoods per voxel. This
+        latter method is, in general, much faster to compute.
+
     n_jobs: int, default = -1
         Parameter passed to joblib for parallelization
 
@@ -121,10 +130,6 @@ def loglik_score(
     # for all voxels
     n_voxels = activations.shape[0]
     n_noise = noise_var.shape[0]
-    if n_noise == n_voxels:
-        per_voxel_var = True
-    else:
-        per_voxel_var = False
 
     # In any case, optional signal_var must be the same shape as noise_var
     if signal_var is not None:
@@ -161,7 +166,7 @@ def loglik_score(
 
         return ev.flatten()
 
-    if not per_voxel_var:
+    if not noise_per_voxel:
         # Pre-compute cov_inv and slogdet to save time for every noise_var
         cov_list, slogdets = [], []
         N = len(activations[0])
@@ -221,7 +226,7 @@ def loglik_score(
 
     print(results)
     loglik_score = np.concatenate(results)  # shape (n_voxels,) or (n_voxels * n_noise,)
-    if not per_voxel_var:
+    if not noise_per_voxel:
         # Reshape model_scores to (n_voxels, n_noise)
         loglik_score = loglik_score.reshape(n_voxels, n_noise)
 
