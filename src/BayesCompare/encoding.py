@@ -163,7 +163,7 @@ def loglik_score(
 
     if not per_voxel_var:
         # Pre-compute cov_inv and slogdet to save time for every noise_var
-        cov_invs, slogdets = [], []
+        cov_list, slogdets = [], []
         N = len(activations[0])
         print(f"Pre-computing {n_noise} inverse matrices and log-determinants...")
         for nvar, svar in tqdm(zip(noise_var, signal_var), total=noise_var.shape[0]):
@@ -177,11 +177,11 @@ def loglik_score(
             cov_inv = np.linalg.inv(s_cov[:N, :N])
             slogdet = np.linalg.slogdet(cov_inv)
 
-            cov_invs.append(cov_inv)
+            cov_list.append(cov_inv)
             slogdets.append(slogdet)
 
         # Make cov_invs an array for better Joblib management
-        cov_invs = np.array(cov_invs)
+        cov_invs = np.array(cov_list)
 
         # Create tasks with the product of noise_var and voxels
         tasks = itertools.product(range(n_voxels), range(n_noise))
