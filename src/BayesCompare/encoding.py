@@ -1,8 +1,11 @@
+from functools import total_ordering
+import itertools
 import numpy as np
 
 from joblib import Parallel, delayed
 from scipy.special import logsumexp
 from typing import Tuple, Optional
+from scipy.stats import epps_singleton_2samp
 from tqdm import tqdm
 
 from numpy.typing import NDArray
@@ -13,10 +16,10 @@ from BayesCompare.cov_utils import cov_sigma
 def evidence(
     cov: NDArray,
     y: NDArray,
-    mu: Optional[NDArray] = None,
+    mu: Optional[NDArray | float] = None,
     cov_inv: Optional[NDArray] = None,
     slogdet: Optional[np.linalg._linalg.SlogdetResult] = None,
-) -> float:
+) -> float | NDArray:
     """
     Get the log-likelihood that a given model produces the activations observed
     from a certain observed measure (voxel or model)
@@ -29,13 +32,14 @@ def evidence(
         It describes the covariance of the different experimental conditions
         with respect to the different measurement channels
 
-    y: NDArray, shape (n_stim,)
+    y: NDArray, shape (n_stim,) or (n_voxels, n_stim)
         Activation profile of a single measurement channel for each experimental
         condition. In the case of fMRI, it represents the activations of a
         single voxel across the space of experimental conditions or stimuli
 
-    mu: NDArray or None, default None
-        Mean activation from the corresponding measurement channel
+    mu: float, NDArray or None, default None
+        Mean activation from the corresponding measurement channel. It must match
+        the shape of y: float for a single voxel, otherwise array of shape (n_voxels,)
 
     cov_inv: NDArray or None, default None
         The inner inverse of the covariance matrix. Certain variations of the
@@ -49,17 +53,32 @@ def evidence(
     Returns
     -------
 
-    loglik: float
+    loglik: float or NDArray, shape (n_voxels,)
         Log likelihood that y is produced by the model corresponding to cov
 
     """
-    N = len(y)
+    N = y.shape[-1]
     inner_inv = np.linalg.inv(cov[:N, :N]) if cov_inv is None else cov_inv
     logdet = np.linalg.slogdet(inner_inv) if slogdet is None else slogdet
-    if mu is None:
-        ss = np.expand_dims(y, 0) @ inner_inv @ np.expand_dims(y, 1)
-    else:
-        ss = np.expand_dims(y - mu, 0) @ inner_inv @ np.expand_dims(y - mu, 1)
+
+    Y = np.atleast_2d(y)  # (n_voxels, n_stim) or (1, n_stim)
+    if mu is not None:
+        mu = np.asarray(mu)
+
+        # Handle mu shape for correct subtraction
+        if y.ndim == 1:  # Single voxel case
+            if mu.ndim != 0:
+                raise ValueError("Single voxel evidence: mu must be a scalar")
+        else:  # Multiple voxel case
+            if mu.ndim != 1:
+                raise ValueError(
+                    f"Multi-voxel evidence: mu must be a vector of length {y.shape[0]}"
+                )
+            mu = mu[:, None]
+
+        Y = Y - mu
+
+    ss = np.einsum("vi,vi->v", Y @ inner_inv, Y)  # y.T @ inner_inv @ y per voxel
 
     loglik = logdet.logabsdet / 2 - ss / 2 - N / 2 * np.log(2 * np.pi)
 
@@ -69,9 +88,10 @@ def evidence(
 def loglik_score(
     norm_cov: NDArray,
     activations: NDArray,
-    noise_var: NDArray | float,
-    signal_var: Optional[NDArray | float] = None,
+    noise_var: NDArray,
+    signal_var: Optional[NDArray] = None,
     img_weights: Optional[NDArray] = None,
+    noise_per_voxel: bool = True,
     n_jobs: int = -1,
 ) -> NDArray:
     """
@@ -104,62 +124,86 @@ def loglik_score(
         data. This is used to weight the noise variance for each individual entry
         of the covariance matrix
 
+    noise_per_voxel: bool, default True
+        Controls the noise and signal variances are treated. If True, the function
+        expects noise (and optionally signal) variances to match the length of
+        activations, computing the log-likelihood of each voxel with its corresponding
+        noise and signal variances. If False, all voxels will be computed with each
+        value of the lists, resulting in len(noise_var) likelihoods per voxel. This
+        latter method is, in general, much faster to compute.
+
     n_jobs: int, default = -1
         Parameter passed to joblib for parallelization
 
     Returns
     -------
 
-    loglik_score: np.array, shape (n_channels,)
-        Log-likelihood score for each measurement channel and candidate model
+    loglik_score: np.array, shape (n_channels,) or (n_channels, n_noise)
+        Log-likelihood score for each measurement channel, and optionally for each
+        signal/noise variance.
 
     """
-    # If no signal_var is passed, infer it from noise_var (which should be a single value)
-    if signal_var is None:
-        assert isinstance(noise_var, float)
-        single_noise_value = True
-    else:
-        single_noise_value = False
+    n_voxels = activations.shape[0]
+    n_noise = noise_var.shape[0]
 
-    def voxel_loop(norm_cov, y, sig_var, eps_var):
-        """Run evidence on one voxel and all models"""
-
-        if cov_inv is not None:  # Uses the same cov for every voxel
-            ev = evidence(norm_cov, y, cov_inv=cov_inv, slogdet=slogdet)
-        else:  # Uses a different s_cov per voxel due to different noise values
-            s_cov = cov_sigma(
-                norm_cov, signal_var=sig_var, noise_var=eps_var, img_weights=img_weights
+    # Input validation
+    if signal_var is not None:
+        if signal_var.shape[0] != n_noise:
+            raise ValueError(
+                f"Signal var has len {signal_var.shape[0]} but noise var has "
+                f"shape {n_noise}"
             )
-            ev = evidence(s_cov, y)
+    else:
+        signal_var = np.full(shape=n_noise, fill_value=None)
 
-        return ev.flatten()
+    if noise_per_voxel and n_noise != n_voxels:
+        raise ValueError(
+            "Parameter `noise_per_voxel` requires the shapes of `noise_var` and "
+            f"`activations` to match. Got {n_noise} and {n_voxels}"
+        )
 
-    if single_noise_value:  # Pre-compute cov_inv and slogdet to save time
-        N = len(activations[0])
+    def noise_loop(activations, norm_cov, sig_var, eps_var, img_weights=None):
+        """Run evidence for all voxels with the same signal/noise variance"""
+        N = activations.shape[-1]
         s_cov = cov_sigma(
-            norm_cov,
-            signal_var=signal_var,
-            noise_var=noise_var,
-            img_weights=img_weights,
+            norm_cov, signal_var=sig_var, noise_var=eps_var, img_weights=img_weights
         )
         cov_inv = np.linalg.inv(s_cov[:N, :N])
         slogdet = np.linalg.slogdet(cov_inv)
-        img_weights = None
-        model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
-            delayed(voxel_loop)(s_cov, y, signal_var, noise_var)
-            for y in tqdm(activations, total=activations.shape[0])
-        )
-    else:
-        cov_inv = None
-        slogdet = None
-        model_scores: list[NDArray] = Parallel(n_jobs=n_jobs)(
-            delayed(voxel_loop)(norm_cov, y, sig_var, eps_var)
-            for y, sig_var, eps_var in tqdm(
-                zip(activations, signal_var, noise_var), total=activations.shape[0]
-            )
-        )  # All voxels, one layer
+        ev = evidence(None, activations, cov_inv=cov_inv, slogdet=slogdet)
 
-    loglik_score = np.concatenate(model_scores)
+        return ev
+
+    def voxel_loop(y, norm_cov, sig_var, eps_var, img_weights=None):
+        """Run evidence on one voxel and its matching signal/noise variance"""
+        s_cov = cov_sigma(
+            norm_cov,
+            signal_var=sig_var,
+            noise_var=eps_var,
+            img_weights=img_weights,
+        )
+        ev = evidence(s_cov, y)
+
+        return ev.flatten()
+
+    if noise_per_voxel:
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(voxel_loop)(y, norm_cov, sig_var, eps_var, img_weights)
+            for y, sig_var, eps_var in tqdm(
+                zip(activations, signal_var, noise_var),
+                total=activations.shape[0],
+                desc="Voxels",
+            )
+        )
+        loglik_score = np.concatenate(results)  # shape (n_voxels,)
+    else:
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(noise_loop)(activations, norm_cov, sig_var, eps_var, img_weights)
+            for sig_var, eps_var in tqdm(
+                zip(signal_var, noise_var), total=len(noise_var), desc="Noise values"
+            )
+        )
+        loglik_score = np.stack(results, axis=1)  # shape (n_voxels, n_noise)
 
     return loglik_score
 

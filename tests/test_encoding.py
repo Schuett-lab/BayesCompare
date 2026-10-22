@@ -9,6 +9,7 @@ import pathlib
 
 import numpy as np
 from numpy.testing import assert_almost_equal
+from scipy.special import logsumexp
 
 from BayesCompare.encoding import loglik_score, log_posterior
 
@@ -29,10 +30,16 @@ def read_sample_file(file_path):
 def test_evidence_score_io():
     sample_path = "tests/sample_data"
     input_args = {}
-    for input_file in ["input_y", "input_totvar", "input_epsvar", "input_covs_norm"]:
-        print(os.getcwd(), os.path.join(sample_path, f"test_{input_file}*"))
-        filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
-        input_args[input_file] = read_sample_file(filename)
+    input_files = [
+        "test_input_y.npy",
+        "test_input_totvar.npy",
+        "test_input_epsvar.npy",
+        "test_input_covs_norm.pkl",
+    ]
+    for input_file in input_files:
+        # filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
+        file_key = input_file.split(".")[0].strip("test_")
+        input_args[file_key] = read_sample_file(os.path.join(sample_path, input_file))
 
     signal_var = input_args["input_totvar"] - input_args["input_epsvar"]
     expected_multinoise = np.load(os.path.join(sample_path, "test_output_loglik.npy"))
@@ -48,6 +55,7 @@ def test_evidence_score_io():
             activations=input_args["input_y"],
             signal_var=signal_var,
             noise_var=input_args["input_epsvar"],
+            noise_per_voxel=True,
             n_jobs=None,
         )
         model_scores.append(model_score)
@@ -59,14 +67,45 @@ def test_evidence_score_io():
         model_score = loglik_score(
             norm_cov=cov,
             activations=input_args["input_y"],
-            noise_var=0.8,
+            noise_var=np.array([0.8]),
+            noise_per_voxel=False,
             n_jobs=None,
         )
-        model_scores.append(model_score)
+        # Use logsumexp since any number of noise values other than the
+        # same number of voxels generates an extra last dimension over noise
+        # values
+        model_scores.append(logsumexp(model_score, axis=-1))
     score_singlenoise = np.stack(model_scores, axis=1)
 
     assert_almost_equal(score_multinoise, expected_multinoise)
     assert_almost_equal(score_singlenoise, expected_singlenoise)
+
+
+def test_loglik_score_correct_output_shape():
+    sample_cov = np.eye(5)
+    sample_y = np.random.uniform(size=(3, 5))
+    sample_noisevar = np.random.uniform(size=(3,))
+
+    # Test with one variance per voxel (noise_var same shape as activations)
+    expected_shape = sample_y.shape
+    out = loglik_score(
+        norm_cov=sample_cov,
+        activations=sample_y,
+        noise_var=sample_noisevar,
+        noise_per_voxel=True,
+    )
+    assert out.shape[0] == expected_shape[0]
+
+    # Test with multiple values for all voxels (noise_var different shape as activations)
+    n_var = 2
+    out = loglik_score(
+        norm_cov=sample_cov,
+        activations=sample_y,
+        noise_var=sample_noisevar[:n_var],
+        noise_per_voxel=False,
+    )
+    expected_shape = (sample_y.shape[0], n_var)
+    assert out.shape == expected_shape
 
 
 def test_posterior():
