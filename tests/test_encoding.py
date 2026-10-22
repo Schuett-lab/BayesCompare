@@ -30,10 +30,16 @@ def read_sample_file(file_path):
 def test_evidence_score_io():
     sample_path = "tests/sample_data"
     input_args = {}
-    for input_file in ["input_y", "input_totvar", "input_epsvar", "evidence_covs_norm"]:
-        print(os.getcwd(), os.path.join(sample_path, f"test_{input_file}*"))
-        filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
-        input_args[input_file] = read_sample_file(filename)
+    input_files = [
+        "test_input_y.npy",
+        "test_input_totvar.npy",
+        "test_input_epsvar.npy",
+        "test_input_covs_norm.pkl",
+    ]
+    for input_file in input_files:
+        # filename = glob.glob(os.path.join(sample_path, f"test_{input_file}*"))[0]
+        file_key = input_file.split(".")[0].strip("test_")
+        input_args[file_key] = read_sample_file(os.path.join(sample_path, input_file))
 
     signal_var = input_args["input_totvar"] - input_args["input_epsvar"]
     expected_multinoise = np.load(os.path.join(sample_path, "test_output_loglik.npy"))
@@ -43,7 +49,7 @@ def test_evidence_score_io():
 
     # Per-voxel noise
     model_scores = []
-    for cov in input_args["evidence_covs_norm"]:
+    for cov in input_args["input_covs_norm"]:
         model_score = loglik_score(
             norm_cov=cov,
             activations=input_args["input_y"],
@@ -57,7 +63,7 @@ def test_evidence_score_io():
 
     # Single noise value
     model_scores = []
-    for cov in input_args["evidence_covs_norm"]:
+    for cov in input_args["input_covs_norm"]:
         model_score = loglik_score(
             norm_cov=cov,
             activations=input_args["input_y"],
