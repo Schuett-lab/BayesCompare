@@ -193,3 +193,19 @@ def check_cos_output(
         return cos_val
 
     return cos_val
+
+
+def clip_to_one_or_minusone_np(sim, tol=1e-4) -> np.ndarray:
+    """Clip small numerical violations to [-1, 1]."""
+    if not -1.0 - tol <= sim <= 1.0 + tol:
+        raise ValueError(f"Similarity outside expected range: {sim}")
+
+    return np.clip(sim, -1.0, 1.0)
+
+
+def clip_to_one_or_minusone_torch(sim: torch.Tensor, tol: float = 1e-4) -> torch.Tensor:
+    """Clip small numerical violations to [-1, 1]."""
+    if torch.any((sim < -1.0 - tol) | (sim > 1.0 + tol)):
+        raise ValueError(f"Similarity outside expected range: {sim}")
+
+    return torch.clamp(sim, min=-1.0, max=1.0)
