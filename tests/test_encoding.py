@@ -2,7 +2,8 @@
 Tests for the evidence_score function
 """
 
-import glob
+import pytest
+
 import os
 import pickle
 import pathlib
@@ -12,6 +13,15 @@ from numpy.testing import assert_almost_equal
 from scipy.special import logsumexp
 
 from BayesCompare.encoding import loglik_score, log_posterior
+
+
+@pytest.fixture
+def synth_data():
+    cov = np.eye(5)
+    y = np.random.uniform(size=(3, 5))
+    noisevar = np.random.uniform(size=(3,))
+
+    return cov, y, noisevar
 
 
 def read_sample_file(file_path):
@@ -81,10 +91,23 @@ def test_evidence_score_io():
     assert_almost_equal(score_singlenoise, expected_singlenoise)
 
 
-def test_loglik_score_correct_output_shape():
-    sample_cov = np.eye(5)
-    sample_y = np.random.uniform(size=(3, 5))
-    sample_noisevar = np.random.uniform(size=(3,))
+def test_loglik_score_signal_noise_different_shape(synth_data):
+    sample_cov, sample_y, sample_noisevar = synth_data
+    sample_sigvar = np.random.uniform(size=(2,))
+
+    with pytest.raises(ValueError) as excinfo:
+        loglik_score(
+            norm_cov=sample_cov,
+            activations=sample_y,
+            noise_var=sample_noisevar,
+            signal_var=sample_sigvar,
+            noise_per_voxel=False,
+        )
+        assert "(they must match)" in str(excinfo.value)
+
+
+def test_loglik_score_correct_output_shape(synth_data):
+    sample_cov, sample_y, sample_noisevar = synth_data
 
     # Test with one variance per voxel (noise_var same shape as activations)
     expected_shape = sample_y.shape
