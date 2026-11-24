@@ -38,6 +38,8 @@ from .others import (
     _procrustes_torch,
     _normalized_bures_similarity_np,
     _normalized_bures_similarity_torch,
+    _unbiased_linear_cka_np,
+    _unbiased_linear_cka_torch,
 )
 
 from .dist_utils import (
@@ -623,6 +625,10 @@ DISTANCES = {
         "normalizedburessimilarity",
         "normburessim",
         "nbs",
+        "unbiasedcka",
+        "unbiased_cka",
+        "cka_unbiased",
+        "ckaunbiased",
     ],
 }
 
@@ -647,6 +653,10 @@ SIMILARITIES = [
     "normalizedburessimilarity",
     "normburessim",
     "nbs",
+    "unbiasedcka",
+    "unbiased_cka",
+    "cka_unbiased",
+    "ckaunbiased",
 ]
 
 REGISTRY = {
@@ -680,6 +690,8 @@ REGISTRY = {
         "normalizedburessimilarity": _normalized_bures_similarity_np,
         "normburessim": _normalized_bures_similarity_np,
         "nbs": _normalized_bures_similarity_np,
+        "unbiasedcka": _unbiased_linear_cka_np,
+        "ckaunbiased": _unbiased_linear_cka_np,
     },
     "torch": {
         "wasserstein": _wasserstein_torch,
@@ -711,5 +723,7 @@ REGISTRY = {
         "normalizedburessimilarity": _normalized_bures_similarity_torch,
         "normburessim": _normalized_bures_similarity_torch,
         "nbs": _normalized_bures_similarity_torch,
+        "unbiasedcka": _unbiased_linear_cka_torch,
+        "ckaunbiased": _unbiased_linear_cka_torch,
     },
 }

@@ -17,6 +17,7 @@ ALL_MEASURES = [
     "jaccard",
     "procrustes",
     "nbs",
+    "unbiasedcka",
 ]
 
 corr_measures = [
@@ -25,6 +26,8 @@ corr_measures = [
     "rsa_cos_spearman",
     "rsa_cos_sim_corr",
 ]
+
+bounded_measures = ["jaccard", "nbs", "cka", "unbiasedcka"]
 
 lmbd = 0.001
 k = 3
@@ -153,9 +156,23 @@ def test_large_scale_inputs(inputs, meas_name):
         assert torch.all(output_th <= torch.pi / 2) and torch.all(
             output_th >= 0
         ), "RSA result Torch Tensor cannot contain values greater than pi/2 or smaller than 0."
+    elif meas_name == "unbiasedcka":
+        assert np.all(
+            abs(output_np) <= 1
+        ), f"{meas_name} result NPArray cannot contain values greater than 1 or smaller than -1."
+        assert torch.all(
+            abs(output_th) <= 1
+        ), f"{meas_name} result Torch Tensor cannot contain values greater than 1 or smaller than -1."
     else:
         assert np.all(output_np >= 0), "NPArray contains negative values"
         assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
+    if meas_name in bounded_measures:
+        assert np.all(
+            abs(output_np) <= 1
+        ), f"{meas_name} result NPArray cannot contain values greater than 1."
+        assert torch.all(
+            abs(output_th) <= 1
+        ), f"{meas_name} result Torch Tensor cannot contain values greater than 1."
 
 
 # # Small scale input
@@ -233,9 +250,23 @@ def test_small_scale_inputs(inputs, meas_name):
         assert torch.all(output_th <= torch.pi / 2) and torch.all(
             output_th >= 0
         ), "RSA result Torch Tensor cannot contain values greater than pi/2 or smaller than 0."
+    elif meas_name == "unbiasedcka":
+        assert np.all(
+            abs(output_np) <= 1
+        ), f"{meas_name} result NPArray cannot contain values greater than 1 or smaller than -1."
+        assert torch.all(
+            abs(output_th) <= 1
+        ), f"{meas_name} result Torch Tensor cannot contain values greater than 1 or smaller than -1."
     else:
         assert np.all(output_np >= 0), "NPArray contains negative values"
         assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
+    if meas_name in bounded_measures:
+        assert np.all(
+            abs(output_np) <= 1
+        ), f"{meas_name} result NPArray cannot contain values greater than 1."
+        assert torch.all(
+            abs(output_th) <= 1
+        ), f"{meas_name} result Torch Tensor cannot contain values greater than 1."
 
 
 # One large and one small scale input
@@ -314,6 +345,20 @@ def test_large_and_small_scale_inputs(inputs, meas_name):
         assert torch.all(output_th <= torch.pi / 2) and torch.all(
             output_th >= 0
         ), "RSA result Torch Tensor cannot contain values greater than pi/2 or smaller than 0."
+    elif meas_name == "unbiasedcka":
+        assert np.all(
+            abs(output_np) <= 1
+        ), f"{meas_name} result NPArray cannot contain values greater than 1 or smaller than -1."
+        assert torch.all(
+            abs(output_th) <= 1
+        ), f"{meas_name} result Torch Tensor cannot contain values greater than 1 or smaller than -1."
     else:
         assert np.all(output_np >= 0), "NPArray contains negative values"
         assert torch.all(output_th >= 0), "Torch Tensor contains negative values"
+    if meas_name in bounded_measures:
+        assert np.all(
+            abs(output_np) <= 1
+        ), f"{meas_name} result NPArray cannot contain values greater than 1."
+        assert torch.all(
+            abs(output_th) <= 1
+        ), f"{meas_name} result Torch Tensor cannot contain values greater than 1."

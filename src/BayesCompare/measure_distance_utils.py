@@ -280,10 +280,14 @@ def get_preprocessing_params(
         elif isinstance(b, list):
             if isinstance(b[0], float):
                 b_list = b
+            elif isinstance(b[0], int):
+                b_list = [float(i) for i in b]
             else:
                 raise TypeError(
                     f"`b` can either be a float or a list of floats! Given b type is {type(b)}"
                 )
+        elif isinstance(b, int):
+            b_list = [float(b)]
         else:
             raise TypeError(
                 f"`b` can either be a float or a list of floats! Given b type is {type(b)}"

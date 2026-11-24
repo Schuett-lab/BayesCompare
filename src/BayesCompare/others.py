@@ -13,6 +13,8 @@ from BayesCompare.dist_utils import (
     check_small_negative,
     check_cos_output,
     check_small_negative_eigenval,
+    clip_to_one_or_minusone_np,
+    clip_to_one_or_minusone_torch,
 )
 
 
@@ -21,7 +23,7 @@ def _cka_np(K1: NDArray, K2: NDArray) -> float:
     K1_centered = double_centering_np(K1)
     K2_centered = double_centering_np(K2)
 
-    return (
+    return clip_to_one_or_minusone_np(
         np.sum(K1_centered * K2_centered)
         / np.sqrt(np.sum(K1_centered * K1_centered))
         / np.sqrt(np.sum(K2_centered * K2_centered))
@@ -33,10 +35,51 @@ def _cka_torch(K1: torch.Tensor, K2: torch.Tensor) -> float:
     K1_centered = double_centering_torch(K1)
     K2_centered = double_centering_torch(K2)
 
-    return (
+    return clip_to_one_or_minusone_torch(
         torch.sum(K1_centered * K2_centered)
         / torch.sqrt(torch.sum(K1_centered * K1_centered))
         / torch.sqrt(torch.sum(K2_centered * K2_centered))
+    )
+
+
+def _unbiased_linear_cka_np(K, L):
+    """unbiased centred kernel alignment"""
+    K_u = u_center_gram_np(K)
+    L_u = u_center_gram_np(L)
+
+    numerator = np.sum(K_u * L_u)
+    norm_k = np.sum(K_u * K_u)
+    norm_l = np.sum(L_u * L_u)
+
+    denominator = np.sqrt(norm_k * norm_l)
+
+    if denominator <= 0:
+        return np.nan
+
+    return clip_to_one_or_minusone_np(numerator / denominator)
+
+
+def _unbiased_linear_cka_torch(K, L):
+    """unbiased centred kernel alignment"""
+    if K.shape != L.shape:
+        raise ValueError("K and L must have the same shape.")
+
+    K_u = u_center_gram_torch(K)
+    L_u = u_center_gram_torch(L)
+
+    numerator = torch.sum(K_u * L_u)
+
+    norm_k = torch.sum(K_u * K_u)
+    norm_l = torch.sum(L_u * L_u)
+
+    denominator = torch.sqrt(norm_k * norm_l)
+
+    return clip_to_one_or_minusone_torch(
+        torch.where(
+            denominator > 0,
+            numerator / denominator.clamp(min=torch.finfo(K.dtype).tiny),
+            torch.full_like(numerator, float("nan")),
+        )
     )
 
 
@@ -378,8 +421,8 @@ def _normalized_bures_similarity_np(K1: NDArray, K2: NDArray):
     """
     sigma1 = double_centering_np(K1.astype(np.float64))
     sigma2 = double_centering_np(K2.astype(np.float64))
-    sig1 = trace_norm(sigma1)
-    sig2 = trace_norm(sigma2)
+    sig1 = sigma1 / np.trace(sigma1)
+    sig2 = sigma2 / np.trace(sigma2)
 
     E_sig1, V_sig1 = np.linalg.eigh(sig1)
     E_sig1 = check_small_negative_eigenval(E_sig1)
@@ -407,8 +450,8 @@ def _normalized_bures_similarity_torch(K1: torch.Tensor, K2: torch.Tensor):
     K2 = K2.to(torch.float64)
     sigma1 = double_centering_torch(K1)
     sigma2 = double_centering_torch(K2)
-    sig1 = trace_norm(sigma1)
-    sig2 = trace_norm(sigma2)
+    sig1 = sigma1 / torch.trace(sigma1)
+    sig2 = sigma2 / torch.trace(sigma2)
 
     E_sig1, V_sig1 = torch.linalg.eigh(sig1)
     E_sig1 = check_small_negative_eigenval(E_sig1)
@@ -516,3 +559,55 @@ def _knn_from_dist_torch(
     elif asc_or_desc == "desc":
         order = torch.argsort(dist, dim=1, descending=True)
     return order[:, 1 : k + 1]
+
+
+def u_center_gram_np(K):
+    """
+    U-center a symmetric Gram matrix.
+    """
+    K = np.asarray(K, dtype=np.float64).copy()
+    n = K.shape[0]
+
+    if K.shape != (n, n):
+        raise ValueError("K must be square.")
+    if n < 4:
+        raise ValueError("At least 4 samples are required.")
+
+    # Remove diagonal before computing sums
+    np.fill_diagonal(K, 0)
+
+    row_sum = K.sum(axis=1, keepdims=True)
+    col_sum = K.sum(axis=0, keepdims=True)
+    total_sum = K.sum()
+
+    K_u = K - row_sum / (n - 2) - col_sum / (n - 2) + total_sum / ((n - 1) * (n - 2))
+
+    np.fill_diagonal(K_u, 0)
+    return K_u
+
+
+def u_center_gram_torch(K):
+    """
+    U-center a symmetric Gram matrix.
+    """
+    n = K.shape[0]
+
+    if K.ndim != 2 or K.shape[1] != n:
+        raise ValueError("K must be a square matrix.")
+    if n < 4:
+        raise ValueError("At least 4 samples are required.")
+
+    # Remove the diagonal
+    K = K.clone()
+    K.fill_diagonal_(0)
+
+    row_sum = K.sum(dim=1, keepdim=True)
+    col_sum = K.sum(dim=0, keepdim=True)
+    total_sum = K.sum()
+
+    K_u = K - row_sum / (n - 2) - col_sum / (n - 2) + total_sum / ((n - 1) * (n - 2))
+
+    # Set diagonal to zero
+    K_u.fill_diagonal_(0)
+
+    return K_u
