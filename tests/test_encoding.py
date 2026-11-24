@@ -12,7 +12,7 @@ import numpy as np
 from numpy.testing import assert_almost_equal
 from scipy.special import logsumexp
 
-from BayesCompare.encoding import loglik_score, log_posterior
+from BayesCompare.encoding import evidence, loglik_score, log_posterior
 
 
 @pytest.fixture
@@ -119,6 +119,22 @@ def test_loglik_score_noise_per_voxel_mismatch(synth_data):
         expected_str = "requires the shapes of `noise_var` and `activations to match"
 
         assert expected_str in str(excinfo.value)
+
+
+def test_evidence_single_voxel_mu_mismatch(synth_data):
+    cov, y, _ = synth_data
+
+    with pytest.raises(ValueError) as excinfo:
+        evidence(cov=cov, y=y[0], mu=[0.0, 0.5])
+        assert "must be a scalar" in str(excinfo.value)
+
+
+def test_evidence_multi_voxel_mu_mismatch(synth_data):
+    cov, y, _ = synth_data
+
+    with pytest.raises(ValueError) as excinfo:
+        evidence(cov=cov, y=y, mu=0.0)
+        assert "must be a vector of length" in str(excinfo.value)
 
 
 def test_loglik_score_correct_output_shape(synth_data):
