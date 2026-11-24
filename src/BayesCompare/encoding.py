@@ -151,7 +151,7 @@ def loglik_score(
         if signal_var.shape[0] != n_noise:
             raise ValueError(
                 f"Signal var has len {signal_var.shape[0]} but noise var has "
-                f"shape {n_noise}"
+                f"shape {n_noise} (they must match)"
             )
     else:
         signal_var = np.full(shape=n_noise, fill_value=None)
