@@ -109,6 +109,17 @@ def test_loglik_score_signal_noise_different_shape(synth_data):
 def test_loglik_score_noise_per_voxel_mismatch(synth_data):
     cov, y, noisevar = synth_data
 
+    with pytest.raises(ValueError) as excinfo:
+        loglik_score(
+            norm_cov=cov,
+            activations=y,
+            noise_var=noisevar[1:],
+            noise_per_voxel=True,
+        )
+        expected_str = "requires the shapes of `noise_var` and `activations to match"
+
+        assert expected_str in str(excinfo.value)
+
 
 def test_loglik_score_correct_output_shape(synth_data):
     cov, y, noisevar = synth_data
