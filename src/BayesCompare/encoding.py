@@ -162,6 +162,7 @@ def loglik_score(
             f"`activations` to match. Got {n_noise} and {n_voxels}"
         )
 
+    # Parallel functions
     def noise_loop(activations, norm_cov, sig_var, eps_var, img_weights=None):
         """Run evidence for all voxels with the same signal/noise variance"""
         N = activations.shape[-1]
@@ -186,6 +187,7 @@ def loglik_score(
 
         return ev.flatten()
 
+    # Parallel call depending on noise parameters
     if noise_per_voxel:
         results = Parallel(n_jobs=n_jobs)(
             delayed(voxel_loop)(y, norm_cov, sig_var, eps_var, img_weights)
