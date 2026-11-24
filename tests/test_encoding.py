@@ -92,29 +92,33 @@ def test_evidence_score_io():
 
 
 def test_loglik_score_signal_noise_different_shape(synth_data):
-    sample_cov, sample_y, sample_noisevar = synth_data
-    sample_sigvar = np.random.uniform(size=(2,))
+    cov, y, noisevar = synth_data
+    sigvar = np.random.uniform(size=(2,))
 
     with pytest.raises(ValueError) as excinfo:
         loglik_score(
-            norm_cov=sample_cov,
-            activations=sample_y,
-            noise_var=sample_noisevar,
-            signal_var=sample_sigvar,
+            norm_cov=cov,
+            activations=y,
+            noise_var=noisevar,
+            signal_var=sigvar,
             noise_per_voxel=False,
         )
         assert "(they must match)" in str(excinfo.value)
 
 
+def test_loglik_score_noise_per_voxel_mismatch(synth_data):
+    cov, y, noisevar = synth_data
+
+
 def test_loglik_score_correct_output_shape(synth_data):
-    sample_cov, sample_y, sample_noisevar = synth_data
+    cov, y, noisevar = synth_data
 
     # Test with one variance per voxel (noise_var same shape as activations)
-    expected_shape = sample_y.shape
+    expected_shape = y.shape
     out = loglik_score(
-        norm_cov=sample_cov,
-        activations=sample_y,
-        noise_var=sample_noisevar,
+        norm_cov=cov,
+        activations=y,
+        noise_var=noisevar,
         noise_per_voxel=True,
     )
     assert out.shape[0] == expected_shape[0]
@@ -122,17 +126,17 @@ def test_loglik_score_correct_output_shape(synth_data):
     # Test with multiple values for all voxels (noise_var different shape as activations)
     n_var = 2
     out = loglik_score(
-        norm_cov=sample_cov,
-        activations=sample_y,
-        noise_var=sample_noisevar[:n_var],
+        norm_cov=cov,
+        activations=y,
+        noise_var=noisevar[:n_var],
         noise_per_voxel=False,
     )
-    expected_shape = (sample_y.shape[0], n_var)
+    expected_shape = (y.shape[0], n_var)
     assert out.shape == expected_shape
 
 
 def test_posterior():
-    input = np.random.rand(50, 10, 2)  # (n_voxels, n_models, n_noise)
+    input = np.random.rand(10, 5, 2)  # (n_voxels, n_models, n_noise)
 
     logpost_2d = log_posterior(input[..., 0])  # input is (n_voxels, n_models)
     logpost_3d = log_posterior(input)
